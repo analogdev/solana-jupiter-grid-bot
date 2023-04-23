@@ -1,0 +1,3 @@
+Z:\Solana_Projects\Test\GridNodeJS\GridNodeJS\obj\Debug\GridNodeJS.njsproj.AssemblyReference.cache
+Z:\Solana_Projects\Test\GridNodeJS\GridNodeJS\obj\Debug\GridNodeJS.njsproj.CoreCompileInputs.cache
+Z:\Solana_Projects\Test\GridNodeJS\GridNodeJS\bin\Microsoft.NodejsTools.WebRole.dll
