@@ -1,5 +1,7 @@
 # Solana Jupiter Grid Bot
 
+------- DO NOT USE YET. STILL UNDER DEVELOPMENT -------
+
 NodeJS and NPM required
 
 Simply open a Command Line Interface (Shift + Right-Click, Open Powershell Window Here)
