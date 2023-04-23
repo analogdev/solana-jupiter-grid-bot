@@ -2,6 +2,10 @@
 
 NodeJS and NPM required
 
-This script has a AIO install script. Simply open a CLI, and type install.js.
+Simply open a Command Line Interface (Shift + Right-Click, Open Powershell Window Here)
 
-Once thats finished installing, enter your private key into the .env file, "SECRET_KEY_BASE58=yourprivatekeyhere1234567890"
+Type: npm install
+
+Once that is complete, in the same powershell;
+
+Type: echo SECRET_KEY_BASE58= > .env
