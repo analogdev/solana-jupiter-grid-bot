@@ -9,3 +9,7 @@ Type: npm install
 Once that is complete, in the same powershell;
 
 Type: echo SECRET_KEY_BASE58= > .env
+
+In the new .env file, simply paste you Solana Wallet Keypair. (Tested with Phantom, but any base58 keypair should work).
+
+Then, node gridbot.js to run!

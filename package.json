@@ -1,8 +1,8 @@
 {
   "name": "grid-node-js",
   "version": "0.0.0",
-  "description": "GridNodeJS",
-  "main": "app.js",
+  "description": "Solana Grid Bot using Jupiter DEX Aggregator",
+  "main": "gridbot.js",
   "type": "module",
   "author": {
     "name": ""
