@@ -3,19 +3,23 @@ import inquirer from "inquirer";
 import readline from "readline";
 import fs from "fs";
 import chalk from "chalk";
-import { Connection, Keypair } from '@solana/web3.js';
+import { Connection, Keypair, VersionedTransaction } from '@solana/web3.js';
 import bs58 from 'bs58';
 import dotenv from 'dotenv';
+import { Wallet } from '@project-serum/anchor';
+
 
 dotenv.config();
 
 // Read the keypair from the .env file
-const secretKeyBase58 = process.env.SECRET_KEY_BASE58;
-if (!secretKeyBase58) {
-    throw new Error('SECRET_KEY_BASE58 not found in .env file');
-}
-const secretKeyBytes = bs58.decode(secretKeyBase58);
-const accountKeypair = Keypair.fromSecretKey(secretKeyBytes);
+//const secretKeyBase58 = process.env.SECRET_KEY_BASE58;
+//if (!secretKeyBase58) {
+//    throw new Error('SECRET_KEY_BASE58 not found in .env file');
+//}
+//const secretKeyBytes = bs58.decode(secretKeyBase58);
+//const wallet = Keypair.fromSecretKey(secretKeyBytes);
+
+const wallet = new Wallet(Keypair.fromSecretKey(bs58.decode(process.env.PRIVATE_KEY)));
 
 // Replace with the Solana network endpoint URL
 const connection = new Connection('https://solana-mainnet.rpc.extrnode.com', 'confirmed');
@@ -43,13 +47,14 @@ class PriceResponse {
 
 let selectedToken;
 var gridSpread = 0;
-var devFee = 0;
+var devFee = 0.1;
 var fixedSwapVal = 0;
 var fixedOrPercent = 0;
 var swapStatic = 0;
 var assetVal = 0;
 var quoteVal = 0;
 var slipTarget = 0;
+var refreshTime = 10;
 
 
 async function main() {
@@ -67,6 +72,7 @@ async function main() {
                     type: "input",
                     name: "selectedToken",
                     message: "Please enter a token symbol (Case Sensitive):",
+                    default: 'SOL'
                 },
                 {
                     type: "list",
@@ -79,6 +85,7 @@ async function main() {
                     type: "input",
                     name: "gridSpread",
                     message: "What Grid Spread in Percent?",
+                    default: "1",
                     validate: function (value) {
                         var valid = !isNaN(parseFloat(value));
                         return valid || "Please Enter A Number";
@@ -88,7 +95,8 @@ async function main() {
                 {
                     type: "input",
                     name: "devFee",
-                    message: "What Percentage Donation Fee would you like to set?",
+                    message: "What Percentage Donation Fee would you like to set? - Default is 0.1%",
+                    default: '0.1',
                     validate: function (value) {
                         var valid = !isNaN(parseFloat(value));
                         return valid || "Please Enter A Number"
@@ -117,7 +125,19 @@ async function main() {
                 {
                     type: "input",
                     name: "slipTarget",
-                    message: "Acceptable Slippage %?",
+                    message: "Acceptable Slippage %? - Default 0.5%",
+                    default: '0.5',
+                    validate: function (value) {
+                        var valid = !isNaN(parseFloat(value));
+                        return valid || "Please Enter A Number";
+                    },
+                    filter: Number
+                },
+                {
+                    type: "input",
+                    name: "refreshTime",
+                    message: "What Refresh Time would you like? (Seconds) - Default 5 Seconds",
+                    default: '5',
                     validate: function (value) {
                         var valid = !isNaN(parseFloat(value));
                         return valid || "Please Enter A Number";
@@ -130,6 +150,7 @@ async function main() {
 
             fixedSwapVal = answer2.fixedSwapVal;
             slipTarget = answer2.slipTarget;
+            refreshTime = answer2.refreshTime;
 
             if (answer.confirmToken === "Yes") {
                 console.clear();
@@ -139,12 +160,13 @@ async function main() {
                 console.log(`Selected Developer Donation: ${devFee}%`);
                 console.log(`Swapping ${fixedSwapVal} ${selectedToken} per layer.`);
                 console.log(`Slippage Target: ${slipTarget}%`)
-                console.log("");
+                console.log("");                
                 await (async () => {
-                    const sbalance = await connection.getBalance(accountKeypair.publicKey);
+                    const sbalance = await connection.getBalance(wallet.publicKey);
                     const startBalance = sbalance / 1000000000
                     console.log(`Account balance: ${startBalance}`);
                 })();
+
                 break;
             }
         }
@@ -153,7 +175,7 @@ async function main() {
 
     setInterval(() => {
         refresh(selectedToken);
-    }, 10000);
+    }, refreshTime * 1000);
 }
 
 //Init Spread Calculation once and declare spreads
@@ -162,6 +184,7 @@ let spreadUp, spreadDown, spreadIncrement;
 var currentPrice;
 var lastPrice;
 var direction;
+
 let startBalance;
 
 async function refresh(selectedToken) {
@@ -202,7 +225,7 @@ async function refresh(selectedToken) {
                 currentPrice = priceResponse.data.selectedToken.price;
                 lastPrice = priceResponse.data.selectedToken.price;      
                 await (async () => {
-                    const sbalance = await connection.getBalance(accountKeypair.publicKey);
+                    const sbalance = await connection.getBalance(wallet.publicKey);
                     startBalance = sbalance / 1000000000
                     //console.log(`Account balance: ${currentBalance}`);
                 })();
@@ -211,7 +234,7 @@ async function refresh(selectedToken) {
 
             console.log(`Starting Balance: ${startBalance}`);
             await (async () => {
-                const balance = await connection.getBalance(accountKeypair.publicKey);
+                const balance = await connection.getBalance(wallet.publicKey);
                 const currentBalance = balance / 1000000000
                 console.log(`Account balance: ${currentBalance}`);
                 var profit = currentBalance - startBalance;
@@ -233,6 +256,7 @@ async function refresh(selectedToken) {
             if (currentPrice >= spreadUp)
             {
                 console.log("Crossed Above! - Create Sell Order");
+                makeSellTransaction();
                 console.log("Shifting Layers Up");
                 //create new layers to monitor
                 spreadUp = spreadUp + spreadIncrement;
@@ -242,6 +266,7 @@ async function refresh(selectedToken) {
             if (currentPrice <= spreadDown)
             {
                 console.log("Crossed Down! - Create Buy Order");
+                makeBuyTransaction();
                 console.log("Shifting Layers Down");
                 //create new layers to monitor
                 spreadUp = spreadUp - spreadIncrement;
@@ -263,5 +288,141 @@ async function refresh(selectedToken) {
     }
 }
 
+async function makeSellTransaction() {
+    // retrieve indexed routed map
+    const indexedRouteMap = await (await fetch('https://quote-api.jup.ag/v4/indexed-route-map')).json();
+    const getMint = (index) => indexedRouteMap["mintKeys"][index];
+    const getIndex = (mint) => indexedRouteMap["mintKeys"].indexOf(mint);
+
+    // generate route map by replacing indexes with mint addresses
+    var generatedRouteMap = {};
+    Object.keys(indexedRouteMap['indexedRouteMap']).forEach((key, index) => {
+        generatedRouteMap[getMint(key)] = indexedRouteMap["indexedRouteMap"][key].map((index) => getMint(index))
+    });
+
+    // list all possible input tokens by mint Address
+    const allInputMints = Object.keys(generatedRouteMap);
+
+    // list tokens can swap by mint address for SOL
+    const swappableOutputForSol = generatedRouteMap['So11111111111111111111111111111111111111112'];
+// console.log({ allInputMints, swappableOutputForSol })
+    // swapping SOL to USDC with input 0.1 SOL and 0.5% slippage
+    const { data } = await (
+        await fetch(`https://quote-api.jup.ag/v4/quote?inputMint=So11111111111111111111111111111111111111112\
+&outputMint=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v\
+&amount=100000000\
+&slippageBps=50`
+        )
+    ).json();
+    const routes = data;
+// console.log(routes)
+    // get serialized transactions for the swap
+    const transactions = await (
+        await fetch('https://quote-api.jup.ag/v4/swap', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                // route from /quote api
+                route: routes[0],
+                // user public key to be used for the swap
+                userPublicKey: wallet.publicKey.toString(),
+                // auto wrap and unwrap SOL. default is true
+                wrapUnwrapSOL: true,
+                // feeAccount is optional. Use if you want to charge a fee.  feeBps must have been passed in /quote API.
+                // This is the ATA account for the output token where the fee will be sent to. If you are swapping from SOL->USDC then this would be the USDC ATA you want to collect the fee.
+                // feeAccount: "fee_account_public_key"  
+            })
+        })
+    ).json();
+
+    const { swapTransaction } = transactions;
+    // deserialize the transaction
+    const swapTransactionBuf = Buffer.from(swapTransaction, 'base64');
+    var transaction = VersionedTransaction.deserialize(swapTransactionBuf);
+    console.log(transaction);
+
+    // sign the transaction
+    transaction.sign([wallet.payer]);
+    // Execute the transaction
+    const rawTransaction = transaction.serialize()
+    const txid = await connection.sendRawTransaction(rawTransaction, {
+        skipPreflight: true,
+        maxRetries: 2
+    });
+    await connection.confirmTransaction(txid);
+    console.log(`https://solscan.io/tx/${txid}`);
+}
+
+
+
+async function makeBuyTransaction() {
+    var jupSwapValUSDC = (currentPrice * fixedSwapVal) * 1000000000;
+    // retrieve indexed routed map
+    const indexedRouteMap = await (await fetch('https://quote-api.jup.ag/v4/indexed-route-map')).json();
+    const getMint = (index) => indexedRouteMap["mintKeys"][index];
+    const getIndex = (mint) => indexedRouteMap["mintKeys"].indexOf(mint);
+
+    // generate route map by replacing indexes with mint addresses
+    var generatedRouteMap = {};
+    Object.keys(indexedRouteMap['indexedRouteMap']).forEach((key, index) => {
+        generatedRouteMap[getMint(key)] = indexedRouteMap["indexedRouteMap"][key].map((index) => getMint(index))
+    });
+
+    // list all possible input tokens by mint Address
+    const allInputMints = Object.keys(generatedRouteMap);
+
+    // list tokens can swap by mint address for SOL
+    const swappableOutputForSol = generatedRouteMap['So11111111111111111111111111111111111111112'];
+    // console.log({ allInputMints, swappableOutputForSol })
+    // swapping SOL to USDC with input 0.1 SOL and 0.5% slippage
+    const { data } = await (
+        await fetch(`https://quote-api.jup.ag/v4/quote?inputMint=So11111111111111111111111111111111111111112\
+&outputMint=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v\
+&amount=100000000\
+&slippageBps=50`
+        )
+    ).json();
+    const routes = data;
+    // console.log(routes)
+    // get serialized transactions for the swap
+    const transactions = await (
+        await fetch('https://quote-api.jup.ag/v4/swap', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                // route from /quote api
+                route: routes[0],
+                // user public key to be used for the swap
+                userPublicKey: wallet.publicKey.toString(),
+                // auto wrap and unwrap SOL. default is true
+                wrapUnwrapSOL: true,
+                // feeAccount is optional. Use if you want to charge a fee.  feeBps must have been passed in /quote API.
+                // This is the ATA account for the output token where the fee will be sent to. If you are swapping from SOL->USDC then this would be the USDC ATA you want to collect the fee.
+                // feeAccount: "fee_account_public_key"  
+            })
+        })
+    ).json();
+
+    const { swapTransaction } = transactions;
+    // deserialize the transaction
+    const swapTransactionBuf = Buffer.from(swapTransaction, 'base64');
+    var transaction = VersionedTransaction.deserialize(swapTransactionBuf);
+    console.log(transaction);
+
+    // sign the transaction
+    transaction.sign([wallet.payer]);
+    // Execute the transaction
+    const rawTransaction = transaction.serialize()
+    const txid = await connection.sendRawTransaction(rawTransaction, {
+        skipPreflight: true,
+        maxRetries: 2
+    });
+    await connection.confirmTransaction(txid);
+    console.log(`https://solscan.io/tx/${txid}`);
+}
 
 main();

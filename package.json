@@ -12,6 +12,7 @@
   },
   "eslintConfig": {},
   "dependencies": {
+    "@jup-ag/core": "^4.0.0-beta.16",
     "@project-serum/serum": "^0.13.65",
     "@solana/web3.js": "^1.75.0",
     "bs58": "^5.0.0",
@@ -19,6 +20,7 @@
     "dotenv": "^16.0.3",
     "fs": "^0.0.1-security",
     "inquirer": "^9.1.5",
+    "jsbi": "^4.3.0",
     "line-reader": "^0.4.0",
     "node-fetch": "^3.3.1",
     "npm-install-all": "^1.1.21",
