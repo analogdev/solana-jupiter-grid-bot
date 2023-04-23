@@ -1,6 +1,6 @@
-import npmInstallAll from 'npm-install-all';
-import dotenv from 'dotenv';
-import fs from 'fs';
+import npmInstallAll from './lib/npm-install-all';
+import dotenv from './lib/dotenv';
+import fs from './lib/fs';
 
 // Install all node modules using npm-install-all
 npmInstallAll.install((err, result) => {

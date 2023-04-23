@@ -1,4 +1,4 @@
-# GridNodeJS
+# Solana Jupiter Grid Bot
 
 NodeJS and NPM required
 

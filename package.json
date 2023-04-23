@@ -20,6 +20,7 @@
     "fs": "^0.0.1-security",
     "inquirer": "^9.1.5",
     "node-fetch": "^3.3.1",
+    "npm-install-all": "^1.1.21",
     "readline": "^1.3.0",
     "readline-sync": "^1.4.10"
   }
