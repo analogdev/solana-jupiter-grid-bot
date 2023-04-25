@@ -1,29 +1,38 @@
 import fetch from "node-fetch";
 import inquirer from "inquirer";
 import readline from "readline";
-import fs from "fs";
+import fs from "fs/promises";
 import chalk from "chalk";
 import { Connection, Keypair, VersionedTransaction } from '@solana/web3.js';
 import bs58 from 'bs58';
 import dotenv from 'dotenv';
 import { Wallet } from '@project-serum/anchor';
+import axios from 'axios';
+import { promisify }  from 'util';
 
+
+async function getTokens() {
+    try {
+        const response = await axios.get('https://token.jup.ag/strict');
+        const data = response.data;
+        const tokens = data.map(({ symbol, address }) => ({ symbol, address }));
+        await fs.writeFile('tokens.txt', JSON.stringify(tokens));        
+        console.log('Updated Token List');
+        return tokens;
+    } catch (error) {
+        console.error(error);
+    }
+}
 
 dotenv.config();
 
-// Read the keypair from the .env file
-//const secretKeyBase58 = process.env.SECRET_KEY_BASE58;
-//if (!secretKeyBase58) {
-//    throw new Error('SECRET_KEY_BASE58 not found in .env file');
-//}
-//const secretKeyBytes = bs58.decode(secretKeyBase58);
-//const wallet = Keypair.fromSecretKey(secretKeyBytes);
-
+//read keypair and decode to public and private keys.
 const wallet = new Wallet(Keypair.fromSecretKey(bs58.decode(process.env.PRIVATE_KEY)));
 
 // Replace with the Solana network endpoint URL
 const connection = new Connection('https://solana-mainnet.rpc.extrnode.com', 'confirmed');
 
+//api request data for URL query on swaps
 class Tokens {
     constructor(mintSymbol, vsTokenSymbol, price) {
         this.mintSymbol = mintSymbol;
@@ -45,6 +54,7 @@ class PriceResponse {
     }
 }
 
+//vars for user inputs
 let selectedToken;
 var gridSpread = 0;
 var devFee = 0.1;
@@ -55,94 +65,110 @@ var assetVal = 0;
 var quoteVal = 0;
 var slipTarget = 0;
 var refreshTime = 10;
+//let selectedToken; // initialize variable to store the selected symbol
+let selectedAddress; // initialize variable to store the selected address
 
 
 async function main() {
+    await getTokens();
     const rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout,
     });
+    
 
-    if (!selectedToken) {
-        const tokenList = fs.readFileSync("tokens.txt").toString().split("\n");
+    let tokens = JSON.parse(await fs.readFile('tokens.txt'));
 
-        while (true) {
-            const question = [
-                {
-                    type: "input",
-                    name: "selectedToken",
-                    message: "Please enter a token symbol (Case Sensitive):",
-                    default: 'SOL'
-                },
-                {
-                    type: "list",
-                    name: "confirmToken",
-                    message: "Is this the correct token symbol?",
-                    choices: ["Yes", "No"],
-                    prefix: "",
-                },
-                {
-                    type: "input",
-                    name: "gridSpread",
-                    message: "What Grid Spread in Percent?",
-                    default: "1",
-                    validate: function (value) {
-                        var valid = !isNaN(parseFloat(value));
-                        return valid || "Please Enter A Number";
-                    },
-                    filter: Number
-                },
-                {
-                    type: "input",
-                    name: "devFee",
-                    message: "What Percentage Donation Fee would you like to set? - Default is 0.1%",
-                    default: '0.1',
-                    validate: function (value) {
-                        var valid = !isNaN(parseFloat(value));
-                        return valid || "Please Enter A Number"
-                    },
-                    filter: Number
-                }                
-            ];
+    let selectedToken = "";
+    let gridSpread = 1;
+    let devFee = 0.1;
+    let fixedSwapVal = 0;
+    let slipTarget = 0.5;
+    let refreshTime = 5;
+    const questionAsync = promisify(rl.question).bind(rl);
 
-            let answer = await inquirer.prompt(question);
+    let validToken = false;
+    while (!validToken) {
+        const answer = await questionAsync(`Please Enter A Token Symbol (Case Sensitive):`);
+        const token = tokens.find((t) => t.symbol === answer);
+        if (token) {
+            console.log(`Selected Token: ${token.symbol}`);
+            console.log(`Token Address: ${token.address}`);
+            selectedToken = token.symbol;
+            const confirmAnswer = await questionAsync(`Is this the correct token? (Y/N):`);
+            if (confirmAnswer.toLowerCase() === 'y' || confirmAnswer.toLowerCase() === 'yes') {
+                validToken = true;
+            }
+        } else {
+            console.log(`Token ${answer} not found. Please Try Again.`)
+        }
+    }
 
-            selectedToken = answer.selectedToken;
-            gridSpread = answer.gridSpread;
-            devFee = answer.devFee;
 
-            const question2 = [
-                {
-                    type: "input",
-                    name: "fixedSwapVal",
-                    message: `How much ${selectedToken} would you like to swap, per layer?`,
-                    validate: function (value) {
-                        var valid = !isNaN(parseFloat(value));
-                        return valid || "Please Enter A Number";
-                    },
-                    filter: Number
+    while (true) {
+        const question = [            
+            {
+                type: "input",
+                name: "gridSpread",
+                message: "What Grid Spread in Percent?",
+                default: "1",
+                validate: function (value) {
+                    var valid = !isNaN(parseFloat(value));
+                    return valid || "Please Enter A Number";
                 },
-                {
-                    type: "input",
-                    name: "slipTarget",
-                    message: "Acceptable Slippage %? - Default 0.5%",
-                    default: '0.5',
-                    validate: function (value) {
-                        var valid = !isNaN(parseFloat(value));
-                        return valid || "Please Enter A Number";
-                    },
-                    filter: Number
+                filter: Number
+            },
+            {
+                type: "input",
+                name: "devFee",
+                message: "What Percentage Donation Fee would you like to set? - Default is 0.1%",
+                default: '0.1',
+                validate: function (value) {
+                    var valid = !isNaN(parseFloat(value));
+                    return valid || "Please Enter A Number"
                 },
-                {
-                    type: "input",
-                    name: "refreshTime",
-                    message: "What Refresh Time would you like? (Seconds) - Default 5 Seconds",
-                    default: '5',
-                    validate: function (value) {
-                        var valid = !isNaN(parseFloat(value));
-                        return valid || "Please Enter A Number";
-                    },
-                    filter: Number
+                filter: Number
+            }
+        ];
+
+        let answer = await inquirer.prompt(question);
+
+        gridSpread = answer.gridSpread;
+        devFee = answer.devFee;
+
+        const question2 =
+            [
+            {
+                type: "input",
+                name: "fixedSwapVal",
+                message: `How much ${selectedToken} would you like to swap, per layer?`,
+                validate: function (value) {
+                    var valid = !isNaN(parseFloat(value));
+                    return valid || "Please Enter A Number";
+                },
+                filter: Number
+            },
+            {
+                type: "input",
+                name: "slipTarget",
+                message: "Acceptable Slippage %? - Default 0.5%",
+                default: '0.5',
+                validate: function (value) {
+                    var valid = !isNaN(parseFloat(value));
+                    return valid || "Please Enter A Number";
+                },
+                filter: Number
+            },
+            {
+                type: "input",
+                name: "refreshTime",                
+                message: "What Refresh Time would you like? (Seconds) - Default 5 Seconds",
+                default: '5',
+                validate: function (value) {
+                   var valid = !isNaN(parseFloat(value));
+                   return valid || "Please Enter A Number";
+                },
+                filter: Number
                 }
             ];
 
@@ -170,13 +196,14 @@ async function main() {
                 break;
             }
         }
-    }    
+        
     refresh(selectedToken);   
 
     setInterval(() => {
         refresh(selectedToken);
     }, refreshTime * 1000);
 }
+
 
 //Init Spread Calculation once and declare spreads
 var gridCalc = true;
