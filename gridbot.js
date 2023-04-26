@@ -10,6 +10,11 @@ import { Wallet } from '@project-serum/anchor';
 import axios from 'axios';
 import { promisify }  from 'util';
 
+//let selectedAddress; // initialize variable to store the selected address
+//let selectedToken = "";
+//let gridSpread;
+//let devFee;
+//let refreshTime;
 
 async function getTokens() {
     try {
@@ -30,7 +35,7 @@ dotenv.config();
 const wallet = new Wallet(Keypair.fromSecretKey(bs58.decode(process.env.PRIVATE_KEY)));
 
 // Replace with the Solana network endpoint URL
-const connection = new Connection('https://solana-mainnet.rpc.extrnode.com', 'confirmed');
+const connection = new Connection('https://rpc.ankr.com/solana_devnet', 'confirmed');
 
 //api request data for URL query on swaps
 class Tokens {
@@ -55,19 +60,14 @@ class PriceResponse {
 }
 
 //vars for user inputs
-let selectedToken;
-var gridSpread = 0;
-var devFee = 0.1;
-var fixedSwapVal = 0;
-var fixedOrPercent = 0;
-var swapStatic = 0;
-var assetVal = 0;
-var quoteVal = 0;
-var slipTarget = 0;
-var refreshTime = 10;
-//let selectedToken; // initialize variable to store the selected symbol
-let selectedAddress; // initialize variable to store the selected address
 
+let selectedAddress;
+let selectedToken = "";
+let gridSpread = 1;
+let devFee = 0.1;
+let fixedSwapVal = 0;
+let slipTarget = 0.5;
+let refreshTime = 5;
 
 async function main() {
     await getTokens();
@@ -78,15 +78,7 @@ async function main() {
     
 
     let tokens = JSON.parse(await fs.readFile('tokens.txt'));
-
-    let selectedToken = "";
-    let gridSpread = 1;
-    let devFee = 0.1;
-    let fixedSwapVal = 0;
-    let slipTarget = 0.5;
-    let refreshTime = 5;
     const questionAsync = promisify(rl.question).bind(rl);
-
     let validToken = false;
     while (!validToken) {
         const answer = await questionAsync(`Please Enter A Token Symbol (Case Sensitive):`);
@@ -98,11 +90,13 @@ async function main() {
             const confirmAnswer = await questionAsync(`Is this the correct token? (Y/N):`);
             if (confirmAnswer.toLowerCase() === 'y' || confirmAnswer.toLowerCase() === 'yes') {
                 validToken = true;
+                selectedAddress = token.address;
             }
         } else {
             console.log(`Token ${answer} not found. Please Try Again.`)
         }
     }
+
 
 
     while (true) {
@@ -162,8 +156,8 @@ async function main() {
             {
                 type: "input",
                 name: "refreshTime",                
-                message: "What Refresh Time would you like? (Seconds) - Default 5 Seconds",
-                default: '5',
+                message: "What Refresh Time would you like? (Seconds) - Default 10 Seconds",
+                default: '10',
                 validate: function (value) {
                    var valid = !isNaN(parseFloat(value));
                    return valid || "Please Enter A Number";
@@ -176,25 +170,23 @@ async function main() {
 
             fixedSwapVal = answer2.fixedSwapVal;
             slipTarget = answer2.slipTarget;
-            refreshTime = answer2.refreshTime;
+            refreshTime = answer2.refreshTime;            
+            console.clear();
+            
+            console.log(`Selected Token: ${selectedToken}`);
+            console.log(`Selected Grid Spread: ${gridSpread}%`);
+            console.log(`Selected Developer Donation: ${devFee}%`);
+            console.log(`Swapping ${fixedSwapVal} ${selectedToken} per layer.`);
+            console.log(`Slippage Target: ${slipTarget}%`)
+            console.log("");                
+             await (async () => {
+                const sbalance = await connection.getBalance(wallet.publicKey);
+                const startBalance = sbalance / 1000000000
+                console.log(`Account balance: ${startBalance}`);
+            })();
 
-            if (answer.confirmToken === "Yes") {
-                console.clear();
-                //console.log("");
-                console.log(`Selected Token: ${selectedToken}`);
-                console.log(`Selected Grid Spread: ${gridSpread}%`);
-                console.log(`Selected Developer Donation: ${devFee}%`);
-                console.log(`Swapping ${fixedSwapVal} ${selectedToken} per layer.`);
-                console.log(`Slippage Target: ${slipTarget}%`)
-                console.log("");                
-                await (async () => {
-                    const sbalance = await connection.getBalance(wallet.publicKey);
-                    const startBalance = sbalance / 1000000000
-                    console.log(`Account balance: ${startBalance}`);
-                })();
-
-                break;
-            }
+            break;
+            
         }
         
     refresh(selectedToken);   
@@ -206,6 +198,7 @@ async function main() {
 
 
 //Init Spread Calculation once and declare spreads
+
 var gridCalc = true;
 let spreadUp, spreadDown, spreadIncrement;
 var currentPrice;
@@ -315,7 +308,12 @@ async function refresh(selectedToken) {
     }
 }
 
+
+
 async function makeSellTransaction() {
+    var usdcLamports = fixedSwapVal * currentPrice;
+    var fixedSwapValLamports = fixedSwapVal * 1000000000;
+    var slipBPS = slipTarget * 100;
     // retrieve indexed routed map
     const indexedRouteMap = await (await fetch('https://quote-api.jup.ag/v4/indexed-route-map')).json();
     const getMint = (index) => indexedRouteMap["mintKeys"][index];
@@ -328,19 +326,18 @@ async function makeSellTransaction() {
     });
 
     // list all possible input tokens by mint Address
-    const allInputMints = Object.keys(generatedRouteMap);
+    //const allInputMints = Object.keys(generatedRouteMap);
 
     // list tokens can swap by mint address for SOL
-    const swappableOutputForSol = generatedRouteMap['So11111111111111111111111111111111111111112'];
+    //const swappableOutputForSol = generatedRouteMap['So11111111111111111111111111111111111111112'];
 // console.log({ allInputMints, swappableOutputForSol })
     // swapping SOL to USDC with input 0.1 SOL and 0.5% slippage
-    const { data } = await (
-        await fetch(`https://quote-api.jup.ag/v4/quote?inputMint=So11111111111111111111111111111111111111112\
-&outputMint=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v\
-&amount=100000000\
-&slippageBps=50`
-        )
-    ).json();
+
+    console.log(selectedAddress);
+    console.log(slipBPS);
+    console.log(fixedSwapValLamports);
+
+    const { data } = await (await fetch('https://quote-api.jup.ag/v4/quote?inputMint=' + selectedAddress + '&outputMint=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v&amount=' + fixedSwapValLamports + '&slippageBps=' + slipBPS)).json();
     const routes = data;
 // console.log(routes)
     // get serialized transactions for the swap
@@ -363,8 +360,11 @@ async function makeSellTransaction() {
             })
         })
     ).json();
+    console.log(transactions);
 
     const { swapTransaction } = transactions;
+
+    console.log(swapTransaction);
     // deserialize the transaction
     const swapTransactionBuf = Buffer.from(swapTransaction, 'base64');
     var transaction = VersionedTransaction.deserialize(swapTransactionBuf);
@@ -385,7 +385,9 @@ async function makeSellTransaction() {
 
 
 async function makeBuyTransaction() {
-    var jupSwapValUSDC = (currentPrice * fixedSwapVal) * 1000000000;
+    var usdcLamports = fixedSwapVal * currentPrice;
+    var fixedSwapValLamports = fixedSwapVal * 1000000000;
+    var slipBPS = slipTarget * 100;
     // retrieve indexed routed map
     const indexedRouteMap = await (await fetch('https://quote-api.jup.ag/v4/indexed-route-map')).json();
     const getMint = (index) => indexedRouteMap["mintKeys"][index];
@@ -398,19 +400,17 @@ async function makeBuyTransaction() {
     });
 
     // list all possible input tokens by mint Address
-    const allInputMints = Object.keys(generatedRouteMap);
+    //const allInputMints = Object.keys(generatedRouteMap);
 
     // list tokens can swap by mint address for SOL
-    const swappableOutputForSol = generatedRouteMap['So11111111111111111111111111111111111111112'];
+    //const swappableOutputForSol = generatedRouteMap['So11111111111111111111111111111111111111112'];
     // console.log({ allInputMints, swappableOutputForSol })
     // swapping SOL to USDC with input 0.1 SOL and 0.5% slippage
-    const { data } = await (
-        await fetch(`https://quote-api.jup.ag/v4/quote?inputMint=So11111111111111111111111111111111111111112\
-&outputMint=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v\
-&amount=100000000\
-&slippageBps=50`
-        )
-    ).json();
+    console.log(selectedAddress);
+    console.log(slipBPS);
+    console.log(usdcLamports);
+
+    const { data } = await (await fetch('https://quote-api.jup.ag/v4/quote?inputMint=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v&outputMint=' + selectedAddress + '&amount=' + usdcLamports + '&slippageBps=' + slipBPS)).json();
     const routes = data;
     // console.log(routes)
     // get serialized transactions for the swap
