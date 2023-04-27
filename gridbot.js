@@ -36,7 +36,7 @@ const wallet = new Wallet(Keypair.fromSecretKey(bs58.decode(process.env.PRIVATE_
 
 // Replace with the Solana network endpoint URL
 
-const connection = new Connection('https://intensive-floral-shard.solana-mainnet.discover.quiknode.pro/0c1a535c98d59bbea9a9386496925129a2d2b7e7/', 'confirmed', {
+const connection = new Connection(process.env.RPC_ENDPOINT, 'confirmed', {
     commitment: 'confirmed',
     timeout: 60000
 });
@@ -184,7 +184,7 @@ async function main() {
             console.log(`Selected Developer Donation: ${devFee}%`);
             console.log(`Swapping ${fixedSwapVal} ${selectedToken} per layer.`);
             console.log(`Slippage Target: ${slipTarget}%`)
-        console.log("");
+            console.log("");
             /*
             await (async () => {
             const solBalance = await connection.getBalance(wallet.publicKey);
@@ -210,6 +210,7 @@ async function main() {
 var gridCalc = true;
 let spreadUp, spreadDown, spreadIncrement;
 let solBalance, usdcBalance, solBalanceStart, usdcBalanceStart;
+let buyOrders, sellOrders;
 var currentPrice;
 var lastPrice;
 var direction;
@@ -253,6 +254,8 @@ async function refresh(selectedToken) {
                 spreadIncrement = (priceResponse.data.selectedToken.price - spreadDown);
                 currentPrice = priceResponse.data.selectedToken.price;
                 lastPrice = priceResponse.data.selectedToken.price;
+                buyOrders = 0;
+                sellOrders = 0;
 
                 //Get Start Balances
                 await (async () => {
@@ -284,9 +287,11 @@ async function refresh(selectedToken) {
                 console.log(`Current USDC Balance: ${currentUsdcBalance}`);
                 var solDiff = (currentBalance - solBalanceStart);
                 var usdcDiff = (currentUsdcBalance - usdcBalanceStart);
-                var profit = (solDiff * currentPrice) + usdcDiff;
+                var profit = (solDiff * currentPrice) + usdcDiff;                
                 console.log(`Current Profit USD: ${profit}`)
                 console.log("");
+                console.log(`Buy Orders: ${buyOrders}`);
+                console.log(`Sell Orders: ${sellOrders}`);
             })();
             
 
@@ -399,6 +404,7 @@ async function makeSellTransaction() {
     });
     await connection.confirmTransaction(txid);
     console.log(`https://solscan.io/tx/${txid}`);
+    sellOrders++;
 }
 
 async function makeBuyTransaction() {
@@ -465,5 +471,6 @@ async function makeBuyTransaction() {
     });
     await connection.confirmTransaction(txid);
     console.log(`https://solscan.io/tx/${txid}`);
+    buyOrders++;
 }
 main();
