@@ -3,7 +3,7 @@ import inquirer from "inquirer";
 import readline from "readline";
 import fs from "fs/promises";
 import chalk from "chalk";
-import { Connection, Keypair, VersionedTransaction } from '@solana/web3.js';
+import { Connection, Keypair, VersionedTransaction, PublicKey } from '@solana/web3.js';
 import bs58 from 'bs58';
 import dotenv from 'dotenv';
 import { Wallet } from '@project-serum/anchor';
@@ -35,7 +35,11 @@ dotenv.config();
 const wallet = new Wallet(Keypair.fromSecretKey(bs58.decode(process.env.PRIVATE_KEY)));
 
 // Replace with the Solana network endpoint URL
-const connection = new Connection('https://rpc.ankr.com/solana_devnet', 'confirmed');
+
+const connection = new Connection('https://intensive-floral-shard.solana-mainnet.discover.quiknode.pro/0c1a535c98d59bbea9a9386496925129a2d2b7e7/', 'confirmed', {
+    commitment: 'confirmed',
+    timeout: 60000
+});
 
 //api request data for URL query on swaps
 class Tokens {
@@ -68,6 +72,7 @@ let devFee = 0.1;
 let fixedSwapVal = 0;
 let slipTarget = 0.5;
 let refreshTime = 5;
+const usdcMintAddress = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
 
 async function main() {
     await getTokens();
@@ -170,7 +175,8 @@ async function main() {
 
             fixedSwapVal = answer2.fixedSwapVal;
             slipTarget = answer2.slipTarget;
-            refreshTime = answer2.refreshTime;            
+            refreshTime = answer2.refreshTime;
+            
             console.clear();
             
             console.log(`Selected Token: ${selectedToken}`);
@@ -178,13 +184,17 @@ async function main() {
             console.log(`Selected Developer Donation: ${devFee}%`);
             console.log(`Swapping ${fixedSwapVal} ${selectedToken} per layer.`);
             console.log(`Slippage Target: ${slipTarget}%`)
-            console.log("");                
-             await (async () => {
-                const sbalance = await connection.getBalance(wallet.publicKey);
-                const startBalance = sbalance / 1000000000
-                console.log(`Account balance: ${startBalance}`);
-            })();
-
+        console.log("");
+            /*
+            await (async () => {
+            const solBalance = await connection.getBalance(wallet.publicKey);
+            //const usdcBalance = await connection.getParsedTokenAccountsByOwner(wallet.publicKey, { mint: usdcMintAddress, })
+            const solBalanceStart = solBalance / 1000000000;
+            //const usdcBalanceStart = usdcBalance / 1000000;
+            console.log(`SOL Balance: ${solBalanceStart}`);
+            console.log(`USDC Balance: ${usdcBalanceStart}`);
+        })();
+        */
             break;
             
         }
@@ -196,16 +206,13 @@ async function main() {
     }, refreshTime * 1000);
 }
 
-
 //Init Spread Calculation once and declare spreads
-
 var gridCalc = true;
 let spreadUp, spreadDown, spreadIncrement;
+let solBalance, usdcBalance, solBalanceStart, usdcBalanceStart;
 var currentPrice;
 var lastPrice;
 var direction;
-
-let startBalance;
 
 async function refresh(selectedToken) {
     const response = await fetch(
@@ -237,28 +244,48 @@ async function refresh(selectedToken) {
             console.log(`Swapping ${fixedSwapVal}${selectedToken} per Grid`);
             console.log(`Maximum Slippage: ${slipTarget}%`);
             console.log("");
+
             //Create grid values and array once
             if (gridCalc) {
+                usdcBalanceStart = 0;
                 spreadDown = priceResponse.data.selectedToken.price * (1 - (gridSpread / 100));
                 spreadUp = priceResponse.data.selectedToken.price * (1 + (gridSpread / 100));
                 spreadIncrement = (priceResponse.data.selectedToken.price - spreadDown);
                 currentPrice = priceResponse.data.selectedToken.price;
-                lastPrice = priceResponse.data.selectedToken.price;      
+                lastPrice = priceResponse.data.selectedToken.price;
+
+                //Get Start Balances
                 await (async () => {
-                    const sbalance = await connection.getBalance(wallet.publicKey);
-                    startBalance = sbalance / 1000000000
-                    //console.log(`Account balance: ${currentBalance}`);
+                    const solBalance = await connection.getBalance(wallet.publicKey);
+                    solBalanceStart = solBalance / 1000000000;
+                    console.log(`SOL Balance: ${solBalanceStart}`);
                 })();
-                gridCalc = false;
+                if (!usdcBalanceStart) {
+                    const usdcAccounts = await connection.getParsedTokenAccountsByOwner(wallet.publicKey, { mint: usdcMintAddress });
+                    const usdcAccountInfo = usdcAccounts && usdcAccounts.value[0] && usdcAccounts.value[0].account;
+                    const usdcTokenAccount = usdcAccountInfo.data.parsed.info;
+                    usdcBalanceStart = usdcTokenAccount.tokenAmount.uiAmount;                    
+                }                
+                gridCalc = false;                
             }
 
-            console.log(`Starting Balance: ${startBalance}`);
+
+            console.log(`SOL Start Balance: ${solBalanceStart}`);
+            console.log(`USDC Start Balance: ${usdcBalanceStart}`);
+
             await (async () => {
                 const balance = await connection.getBalance(wallet.publicKey);
                 const currentBalance = balance / 1000000000
-                console.log(`Account balance: ${currentBalance}`);
-                var profit = currentBalance - startBalance;
-                console.log(`Current Profit: ${profit}`)
+                console.log(`Current SOL Balance: ${currentBalance}`);
+                const usdcAccounts = await connection.getParsedTokenAccountsByOwner(wallet.publicKey, { mint: usdcMintAddress });
+                const usdcAccountInfo = usdcAccounts && usdcAccounts.value[0] && usdcAccounts.value[0].account;
+                const usdcTokenAccount = usdcAccountInfo.data.parsed.info;
+                const currentUsdcBalance = usdcTokenAccount.tokenAmount.uiAmount;
+                console.log(`Current USDC Balance: ${currentUsdcBalance}`);
+                var solDiff = (currentBalance - solBalanceStart);
+                var usdcDiff = (currentUsdcBalance - usdcBalanceStart);
+                var profit = (solDiff * currentPrice) + usdcDiff;
+                console.log(`Current Profit USD: ${profit}`)
                 console.log("");
             })();
             
@@ -276,7 +303,7 @@ async function refresh(selectedToken) {
             if (currentPrice >= spreadUp)
             {
                 console.log("Crossed Above! - Create Sell Order");
-                makeSellTransaction();
+                await makeSellTransaction();
                 console.log("Shifting Layers Up");
                 //create new layers to monitor
                 spreadUp = spreadUp + spreadIncrement;
@@ -286,7 +313,7 @@ async function refresh(selectedToken) {
             if (currentPrice <= spreadDown)
             {
                 console.log("Crossed Down! - Create Buy Order");
-                makeBuyTransaction();
+                await makeBuyTransaction();
                 console.log("Shifting Layers Down");
                 //create new layers to monitor
                 spreadUp = spreadUp - spreadIncrement;
@@ -325,22 +352,14 @@ async function makeSellTransaction() {
         generatedRouteMap[getMint(key)] = indexedRouteMap["indexedRouteMap"][key].map((index) => getMint(index))
     });
 
-    // list all possible input tokens by mint Address
-    //const allInputMints = Object.keys(generatedRouteMap);
-
-    // list tokens can swap by mint address for SOL
-    //const swappableOutputForSol = generatedRouteMap['So11111111111111111111111111111111111111112'];
-// console.log({ allInputMints, swappableOutputForSol })
-    // swapping SOL to USDC with input 0.1 SOL and 0.5% slippage
-
     console.log(selectedAddress);
     console.log(slipBPS);
     console.log(fixedSwapValLamports);
+    console.log(usdcLamports);
 
     const { data } = await (await fetch('https://quote-api.jup.ag/v4/quote?inputMint=' + selectedAddress + '&outputMint=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v&amount=' + fixedSwapValLamports + '&slippageBps=' + slipBPS)).json();
     const routes = data;
-// console.log(routes)
-    // get serialized transactions for the swap
+
     const transactions = await (
         await fetch('https://quote-api.jup.ag/v4/swap', {
             method: 'POST',
@@ -382,11 +401,14 @@ async function makeSellTransaction() {
     console.log(`https://solscan.io/tx/${txid}`);
 }
 
-
-
 async function makeBuyTransaction() {
-    var usdcLamports = fixedSwapVal * currentPrice;
-    var fixedSwapValLamports = fixedSwapVal * 1000000000;
+    console.log(fixedSwapVal);
+    console.log(currentPrice);
+    var testLamp = (fixedSwapVal * currentPrice);
+    var usdcLamports = Math.floor((fixedSwapVal * currentPrice) * 1000000);
+    console.log(testLamp);
+    console.log(usdcLamports);
+    //var fixedSwapValLamports = fixedSwapVal * 1000000000;
     var slipBPS = slipTarget * 100;
     // retrieve indexed routed map
     const indexedRouteMap = await (await fetch('https://quote-api.jup.ag/v4/indexed-route-map')).json();
@@ -399,13 +421,6 @@ async function makeBuyTransaction() {
         generatedRouteMap[getMint(key)] = indexedRouteMap["indexedRouteMap"][key].map((index) => getMint(index))
     });
 
-    // list all possible input tokens by mint Address
-    //const allInputMints = Object.keys(generatedRouteMap);
-
-    // list tokens can swap by mint address for SOL
-    //const swappableOutputForSol = generatedRouteMap['So11111111111111111111111111111111111111112'];
-    // console.log({ allInputMints, swappableOutputForSol })
-    // swapping SOL to USDC with input 0.1 SOL and 0.5% slippage
     console.log(selectedAddress);
     console.log(slipBPS);
     console.log(usdcLamports);
@@ -451,5 +466,4 @@ async function makeBuyTransaction() {
     await connection.confirmTransaction(txid);
     console.log(`https://solscan.io/tx/${txid}`);
 }
-
 main();
