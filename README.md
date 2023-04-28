@@ -9,4 +9,4 @@ Run the install.bat file to create the .env file for you, and run the npm instal
 
 In the new .env file, simply paste you Solana Wallet Keypair, and your RPC Endpoint address. (Tested with Phantom, but any base58 keypair should work).
 
-Then, node gridbot.js to run!
+Then, node gridbot.js to run! 
