@@ -17,6 +17,7 @@ async function getTokens() {
         const tokens = data.map(({ symbol, address, decimals }) => ({ symbol, address, decimals }));
         await fs.writeFile('tokens.txt', JSON.stringify(tokens));        
         console.log('Updated Token List');
+        console.log("");
         return tokens;
     } catch (error) {
         console.error(error);
@@ -26,6 +27,7 @@ async function getTokens() {
 dotenv.config();
 //read keypair and decode to public and private keys.
 const wallet = new Wallet(Keypair.fromSecretKey(bs58.decode(process.env.PRIVATE_KEY)));
+
 // Replace with the Solana network endpoint URL
 const connection = new Connection(process.env.RPC_ENDPOINT, 'confirmed', {
     commitment: 'confirmed',
@@ -42,8 +44,13 @@ class Tokens {
 }
 
 class PriceData {
-    constructor(selectedToken) {
-        this.selectedToken = selectedToken;
+    constructor(selectedTokenA) {
+        this.selectedTokenA = selectedTokenA;
+    }
+}
+class PriceDataB {
+    constructor(selectedTokenB) {
+        this.selectedTokenB = selectedTokenB;
     }
 }
 
@@ -56,14 +63,12 @@ class PriceResponse {
 
 //vars for user inputs
 
-let selectedAddress;
-let selectedToken = "";
 let gridSpread = 1;
 //let devFee = 0.1;
 let fixedSwapVal = 0;
 let slipTarget = 0.5;
 let refreshTime = 5;
-const usdcMintAddress = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
+//const usdcMintAddress = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
 
 async function main() {
     await getTokens();
@@ -71,23 +76,56 @@ async function main() {
         input: process.stdin,
         output: process.stdout,
     });
-    
 
+    
     let tokens = JSON.parse(await fs.readFile('tokens.txt'));
     const questionAsync = promisify(rl.question).bind(rl);
-    let validToken = false;
-    while (!validToken) {
-        const answer = await questionAsync(`Please Enter A Token Symbol (Case Sensitive):`);
+
+    let tokenAMintAddress = '';
+    let tokenBMintAddress = '';
+    let selectedTokenA = '';
+    let selectedAddressA = '';
+    let selectedTokenB = '';
+    let selectedAddressB = '';
+    let validTokenA = false;
+    let validTokenB = false;    
+
+    while (!validTokenA) {
+        const answer = await questionAsync(`Please Enter The First Token Symbol (Case Sensitive):`);
         const token = tokens.find((t) => t.symbol === answer);
         if (token) {
             console.log(`Selected Token: ${token.symbol}`);
             console.log(`Token Address: ${token.address}`);
             console.log(`Token Decimals: ${token.decimals}`);
-            selectedToken = token.symbol;
+            console.log("");
             const confirmAnswer = await questionAsync(`Is this the correct token? (Y/N):`);
             if (confirmAnswer.toLowerCase() === 'y' || confirmAnswer.toLowerCase() === 'yes') {
-                validToken = true;
-                selectedAddress = token.address;
+                validTokenA = true;
+                selectedTokenA = token.symbol;
+                selectedAddressA = token.address;
+            }
+        } else {
+            console.log(`Token ${answer} not found. Please Try Again.`)
+        }
+    }
+
+    while (!validTokenB) {
+        const answer = await questionAsync(`Please Enter The Second Token Symbol (Case Sensitive):`);
+        const token = tokens.find((t) => t.symbol === answer);
+        if (token) {
+            console.log(`Selected Token: ${token.symbol}`);
+            console.log(`Token Address: ${token.address}`);
+            console.log(`Token Decimals: ${token.decimals}`);
+            console.log("");
+            const confirmAnswer = await questionAsync(`Is this the correct token? (Y/N):`);
+            if (confirmAnswer.toLowerCase() === 'y' || confirmAnswer.toLowerCase() === 'yes') {
+                if (selectedAddressA === token.address) {
+                    console.log(`Tokens cannot be the same. Please try again.`);
+                } else {
+                    validTokenB = true;
+                    selectedTokenB = token.symbol;
+                    selectedAddressB = token.address;
+                }
             }
         } else {
             console.log(`Token ${answer} not found. Please Try Again.`)
@@ -95,6 +133,10 @@ async function main() {
     }
 
 
+    console.log(`Selected Tokens: ${selectedTokenA} and ${selectedTokenB}`);
+    console.log(`Selected Addresses: ${selectedAddressA} and ${selectedAddressB}`);
+    tokenAMintAddress = new PublicKey( selectedAddressA );
+    tokenBMintAddress = new PublicKey( selectedAddressB );
 
     while (true) {
         const question = [            
@@ -129,13 +171,12 @@ async function main() {
         gridSpread = answer.gridSpread;
         //devFee = answer.devFee;
         
-
         const question2 =
             [
             {
                 type: "input",
                 name: "fixedSwapVal",
-                message: `How much ${selectedToken} would you like to swap, per layer?`,
+                message: `How much ${selectedTokenA} would you like to swap, per layer?`,
                 validate: function (value) {
                     var valid = !isNaN(parseFloat(value));
                     return valid || "Please Enter A Number";
@@ -174,107 +215,120 @@ async function main() {
             
             console.clear();
             
-            console.log(`Selected Token: ${selectedToken}`);
+            console.log(`Selected Tokens: ${selectedTokenA} and ${selectedTokenB}`);
             console.log(`Selected Grid Spread: ${gridSpread}%`);
             //console.log(`Selected Developer Donation: ${devFee}%`);
-            console.log(`Swapping ${fixedSwapVal} ${selectedToken} per layer.`);
+            console.log(`Swapping ${fixedSwapVal} ${selectedTokenA} for ${selectedTokenB} per layer.`);
             console.log(`Slippage Target: ${slipTarget}%`)
             console.log("");            
             break;            
         }        
-    refresh(selectedToken);
+    refresh(selectedTokenA, selectedTokenB, selectedAddressA, selectedAddressB, wallet, tokenAMintAddress, tokenBMintAddress);
     setInterval(() => {
-        refresh(selectedToken);
+        refresh(selectedTokenA, selectedTokenB, selectedAddressA, selectedAddressB, wallet, tokenAMintAddress, tokenBMintAddress);
     }, refreshTime * 1000);
 }
 
 //Init Spread Calculation once and declare spreads
 var gridCalc = true;
 let spreadUp, spreadDown, spreadIncrement;
-let solBalance, usdcBalance, solBalanceStart, usdcBalanceStart, accountBalUSDStart, accountBalUSDCurrent;
+let tokenABalanceStart, tokenBBalanceStart, accountBalUSDStart, accountBalUSDCurrent;
 let buyOrders, sellOrders;
 var currentPrice;
 var lastPrice;
 var direction;
 
-async function refresh(selectedToken) {
+
+async function refresh(selectedTokenA, selectedTokenB, selectedAddressA, selectedAddressB, wallet, tokenAMintAddress, tokenBMintAddress) {
     const response = await fetch(
-        `https://price.jup.ag/v4/price?ids=${selectedToken}`
+        `https://price.jup.ag/v4/price?ids=${selectedTokenA}&vsToken=${selectedTokenB}`
     );
 
     if (response.ok) {
         const data = await response.json();
 
-        if (data.data[selectedToken]) {
+        if (data.data[selectedTokenA]) {
             const priceResponse = new PriceResponse(
                 new PriceData(
                     new Tokens(
-                        data.data[selectedToken].mintSymbol,
-                        data.data[selectedToken].vsTokenSymbol,
-                        data.data[selectedToken].price
+                        data.data[selectedTokenA].mintSymbol,
+                        data.data[selectedTokenA].vsTokenSymbol,
+                        data.data[selectedTokenA].price
                     )
                 ),
                 data.timeTaken
             );
             console.clear();
             console.log(
-                `Grid: ${priceResponse.data.selectedToken.mintSymbol} to ${priceResponse.data.selectedToken.vsTokenSymbol}`
+                `Grid: ${priceResponse.data.selectedTokenA.mintSymbol} to ${priceResponse.data.selectedTokenA.vsTokenSymbol}`
             );
             console.log("");
             console.log("Settings:");
             console.log(`Grid Width: ${gridSpread}%`);
             //console.log(`Developer Donation: ${devFee}%`);
-            console.log(`Swapping ${fixedSwapVal}${selectedToken} per Grid`);
+            console.log(`Swapping ${fixedSwapVal}${selectedTokenA} per Grid`);
             console.log(`Maximum Slippage: ${slipTarget}%`);
             console.log("");
 
             //Create grid values and array once
-            if (gridCalc) {
-                usdcBalanceStart = 0;
-                spreadDown = priceResponse.data.selectedToken.price * (1 - (gridSpread / 100));
-                spreadUp = priceResponse.data.selectedToken.price * (1 + (gridSpread / 100));
-                spreadIncrement = (priceResponse.data.selectedToken.price - spreadDown);
-                currentPrice = priceResponse.data.selectedToken.price;
-                lastPrice = priceResponse.data.selectedToken.price;
+            if (gridCalc) {                
+                spreadDown = priceResponse.data.selectedTokenA.price * (1 - (gridSpread / 100));
+                spreadUp = priceResponse.data.selectedTokenA.price * (1 + (gridSpread / 100));
+                spreadIncrement = (priceResponse.data.selectedTokenA.price - spreadDown);
+                currentPrice = priceResponse.data.selectedTokenA.price;
+                lastPrice = priceResponse.data.selectedTokenA.price;
                 buyOrders = 0;
                 sellOrders = 0;
 
                 //Get Start Balances
-                await (async () => {
-                    const solBalance = await connection.getBalance(wallet.publicKey);
-                    solBalanceStart = solBalance / 1000000000;
-                    console.log(`SOL Balance: ${solBalanceStart.toFixed(4)}`);
-                })();
-                if (!usdcBalanceStart) {
-                    const usdcAccounts = await connection.getParsedTokenAccountsByOwner(wallet.publicKey, { mint: usdcMintAddress });
-                    const usdcAccountInfo = usdcAccounts && usdcAccounts.value[0] && usdcAccounts.value[0].account;
-                    const usdcTokenAccount = usdcAccountInfo.data.parsed.info;
-                    usdcBalanceStart = usdcTokenAccount.tokenAmount.uiAmount;                    
-                }     
-                accountBalUSDStart = (solBalanceStart * currentPrice) + usdcBalanceStart;
-                gridCalc = false;                
-            }
+                if (selectedTokenA === "SOL") {
+                        tokenABalanceStart = await connection.getBalance(wallet.publicKey) / 1000000000;
+                        //solBalanceStart = solBalance / 1000000000;                    
+                } else {
+                    const tokenAAccounts = await connection.getParsedTokenAccountsByOwner(wallet.publicKey, { mint: tokenAMintAddress });                    
+                    const tokenAAccountInfo = tokenAAccounts && tokenAAccounts.value[0] && tokenAAccounts.value[0].account;                    
+                    const tokenAAccount = tokenAAccountInfo.data.parsed.info;                    
+                    tokenABalanceStart = tokenAAccount.tokenAmount.uiAmount;
+                }
 
-            console.log(`TokenA Start Balance: ${solBalanceStart.toFixed(4)}`);
-            console.log(`TokenB Start Balance: ${usdcBalanceStart.toFixed(4)}`);
+                if (selectedTokenB === "SOL") {
+                        tokenBBalanceStart = await connection.getBalance(wallet.publicKey) / 1000000000;
+                        //solBalanceStart = solBalance / 1000000000;                    
+                } else {
+                    const tokenBAccounts = await connection.getParsedTokenAccountsByOwner(wallet.publicKey, { mint: tokenBMintAddress });
+                    const tokenBAccountInfo = tokenBAccounts && tokenBAccounts.value[0] && tokenBAccounts.value[0].account;
+                    const tokenBAccount = tokenBAccountInfo.data.parsed.info;
+                    tokenBBalanceStart = tokenBAccount.tokenAmount.uiAmount;
+                }
+                gridCalc = false;
+            }
+           //console.log(tokenABalanceStart.toFixed(4));
+            //console.log(tokenBBalanceStart.toFixed(4));
+            console.log(`TokenA Start Balance: ${tokenABalanceStart.toFixed(4)}`);
+            console.log(`TokenB Start Balance: ${tokenBBalanceStart.toFixed(4)}`);
             console.log("");
 
             await (async () => {
+
+
                 const balance = await connection.getBalance(wallet.publicKey);
                 const currentBalance = balance / 1000000000
                 console.log(`Current TokenA Balance: ${currentBalance}`);
+
+
+
                 const usdcAccounts = await connection.getParsedTokenAccountsByOwner(wallet.publicKey, { mint: usdcMintAddress });
                 const usdcAccountInfo = usdcAccounts && usdcAccounts.value[0] && usdcAccounts.value[0].account;
                 const usdcTokenAccount = usdcAccountInfo.data.parsed.info;
                 const currentUsdcBalance = usdcTokenAccount.tokenAmount.uiAmount;
                 accountBalUSDCurrent = (currentBalance * currentPrice) + currentUsdcBalance;
+
+
+
                 console.log(`Current TokenB Balance: ${currentUsdcBalance.toFixed(4)}`);
                 console.log("");
                 console.log(`Start Total USD Balance: ${accountBalUSDStart.toFixed(4)}`);
                 console.log(`Current Total USD Balance: ${accountBalUSDCurrent.toFixed(4)}`);
-                //var solDiff = (currentBalance - solBalanceStart);
-                //var usdcDiff = (currentUsdcBalance - usdcBalanceStart);
-                //var profit = (solDiff * currentPrice) + usdcDiff;
                 var profit = accountBalUSDCurrent - accountBalUSDStart;
                 console.log("");
                 console.log(`Current Profit USD: ${profit.toFixed(4)}`)                
@@ -285,7 +339,7 @@ async function refresh(selectedToken) {
             
 
             //Monitor price to last price difference.
-            currentPrice = priceResponse.data.selectedToken.price.toFixed(4);
+            currentPrice = priceResponse.data.selectedTokenA.price.toFixed(4);
             if (currentPrice > lastPrice) { direction = "Trending Up" };
             if (currentPrice === lastPrice) { direction = "Trending Sideways" };
             if (currentPrice < lastPrice) { direction = "Trending Down" };
@@ -315,13 +369,13 @@ async function refresh(selectedToken) {
             }
             
             console.log(chalk.red(`Spread Up: ${spreadUp.toFixed(4)}`, "-- Sell"));
-            console.log(`Price: ${priceResponse.data.selectedToken.price.toFixed(4)}`);
+            console.log(`Price: ${priceResponse.data.selectedTokenA.price.toFixed(4)}`);
             console.log(chalk.green(`Spread Down: ${spreadDown.toFixed(4)}`, "-- Buy"));
             console.log("");
-            lastPrice = priceResponse.data.selectedToken.price.toFixed(4);
+            lastPrice = priceResponse.data.selectedTokenA.price.toFixed(4);
         } else {
-            console.log(`Token ${selectedToken} not found`);
-            selectedToken = null;
+            console.log(`Token ${selectedTokenA} not found`);
+            selectedTokenB = null;
             main();
         }
     } else {
