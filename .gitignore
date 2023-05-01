@@ -1,2 +1,6 @@
 node_modules/
 .env
+GridNodeJs.njsproj
+bin/
+obj/
+tokens.txt

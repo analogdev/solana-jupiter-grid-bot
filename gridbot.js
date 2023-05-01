@@ -14,7 +14,7 @@ async function getTokens() {
     try {
         const response = await axios.get('https://token.jup.ag/strict');
         const data = response.data;
-        const tokens = data.map(({ symbol, address }) => ({ symbol, address }));
+        const tokens = data.map(({ symbol, address, decimals }) => ({ symbol, address, decimals }));
         await fs.writeFile('tokens.txt', JSON.stringify(tokens));        
         console.log('Updated Token List');
         return tokens;
@@ -82,6 +82,7 @@ async function main() {
         if (token) {
             console.log(`Selected Token: ${token.symbol}`);
             console.log(`Token Address: ${token.address}`);
+            console.log(`Token Decimals: ${token.decimals}`);
             selectedToken = token.symbol;
             const confirmAnswer = await questionAsync(`Is this the correct token? (Y/N):`);
             if (confirmAnswer.toLowerCase() === 'y' || confirmAnswer.toLowerCase() === 'yes') {
@@ -253,6 +254,7 @@ async function refresh(selectedToken) {
                 accountBalUSDStart = (solBalanceStart * currentPrice) + usdcBalanceStart;
                 gridCalc = false;                
             }
+
             console.log(`TokenA Start Balance: ${solBalanceStart.toFixed(4)}`);
             console.log(`TokenB Start Balance: ${usdcBalanceStart.toFixed(4)}`);
             console.log("");
@@ -329,16 +331,7 @@ async function refresh(selectedToken) {
 async function makeSellTransaction() {
     var fixedSwapValLamports = fixedSwapVal * 1000000000;
     var slipBPS = slipTarget * 100;
-    // retrieve indexed routed map
-    const indexedRouteMap = await (await fetch('https://quote-api.jup.ag/v4/indexed-route-map')).json();
-    const getMint = (index) => indexedRouteMap["mintKeys"][index];
-    const getIndex = (mint) => indexedRouteMap["mintKeys"].indexOf(mint);
-
-    // generate route map by replacing indexes with mint addresses
-    var generatedRouteMap = {};
-    Object.keys(indexedRouteMap['indexedRouteMap']).forEach((key, index) => {
-        generatedRouteMap[getMint(key)] = indexedRouteMap["indexedRouteMap"][key].map((index) => getMint(index))
-    });
+    
     const { data } = await (await fetch('https://quote-api.jup.ag/v4/quote?inputMint=' + selectedAddress + '&outputMint=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v&amount=' + fixedSwapValLamports + '&slippageBps=' + slipBPS)).json();
     const routes = data;
 
@@ -378,16 +371,7 @@ async function makeSellTransaction() {
 async function makeBuyTransaction() {
     var usdcLamports = Math.floor((fixedSwapVal * currentPrice) * 1000000);
     var slipBPS = slipTarget * 100;
-    // retrieve indexed routed map
-    const indexedRouteMap = await (await fetch('https://quote-api.jup.ag/v4/indexed-route-map')).json();
-    const getMint = (index) => indexedRouteMap["mintKeys"][index];
-    const getIndex = (mint) => indexedRouteMap["mintKeys"].indexOf(mint);
-
-    // generate route map by replacing indexes with mint addresses
-    var generatedRouteMap = {};
-    Object.keys(indexedRouteMap['indexedRouteMap']).forEach((key, index) => {
-        generatedRouteMap[getMint(key)] = indexedRouteMap["indexedRouteMap"][key].map((index) => getMint(index))
-    });
+    
     const { data } = await (await fetch('https://quote-api.jup.ag/v4/quote?inputMint=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v&outputMint=' + selectedAddress + '&amount=' + usdcLamports + '&slippageBps=' + slipBPS)).json();
     const routes = data;
     // get serialized transactions for the swap
