@@ -1,7 +1,6 @@
 # Solana Jupiter Grid Bot
 
------------ Only Works With SOL-USDC -----------
------ Please Ensure You Have USDC Balance! -----
+SCRIPT CURRENTLY NON-FUNCTIONING. DO NOT USE.
 
 NodeJS and NPM required
 
