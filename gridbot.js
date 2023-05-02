@@ -86,8 +86,10 @@ async function main() {
     let tokenBMintAddress = '';
     let selectedTokenA = '';
     let selectedAddressA = '';
+    let selectedDecimalsA = '';
     let selectedTokenB = '';
     let selectedAddressB = '';
+    let selectedDecimalsB = '';
     let validTokenA = false;
     let validTokenB = false;    
 
@@ -104,6 +106,7 @@ async function main() {
                 validTokenA = true;
                 selectedTokenA = token.symbol;
                 selectedAddressA = token.address;
+                selectedDecimalsA = token.decimals;
             }
         } else {
             console.log(`Token ${answer} not found. Please Try Again.`)
@@ -126,6 +129,7 @@ async function main() {
                     validTokenB = true;
                     selectedTokenB = token.symbol;
                     selectedAddressB = token.address;
+                    selectedDecimalsB = token.decimals;
                 }
             }
         } else {
@@ -224,11 +228,12 @@ async function main() {
             console.log("");            
             break;            
         }        
-                        refresh(selectedTokenA, selectedTokenB, selectedAddressA, selectedAddressB, wallet, tokenAMintAddress, tokenBMintAddress);
-    setInterval(() => { refresh(selectedTokenA, selectedTokenB, selectedAddressA, selectedAddressB, wallet, tokenAMintAddress, tokenBMintAddress); }, refreshTime * 1000);
+    refresh(selectedTokenA, selectedTokenB, selectedAddressA, selectedAddressB, wallet, tokenAMintAddress, tokenBMintAddress, selectedDecimalsA, selectedDecimalsB);
+    setInterval(() => { refresh(selectedTokenA, selectedTokenB, selectedAddressA, selectedAddressB, wallet, tokenAMintAddress, tokenBMintAddress, selectedDecimalsA, selectedDecimalsB); }, refreshTime * 1000);
 }
 
 //Init Spread Calculation once and declare spreads
+console.clear();
 var gridCalc = true;
 let spreadUp, spreadDown, spreadIncrement;
 let tokenABalanceStart, tokenBBalanceStart, tokenABalanceNow, tokenBBalanceNow, accountBalUSDStart, accountBalUSDCurrent;
@@ -240,7 +245,7 @@ var direction;
 const usdcAddress = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
 
-async function refresh(selectedTokenA, selectedTokenB, selectedAddressA, selectedAddressB, wallet, tokenAMintAddress, tokenBMintAddress) { 
+async function refresh(selectedTokenA, selectedTokenB, selectedAddressA, selectedAddressB, wallet, tokenAMintAddress, tokenBMintAddress, selectedDecimalsA, selectedDecimalsB) { 
     const response = await fetch(
         `https://price.jup.ag/v4/price?ids=${selectedTokenA}&vsToken=${selectedTokenB}`
     );
@@ -256,6 +261,7 @@ async function refresh(selectedTokenA, selectedTokenB, selectedAddressA, selecte
             const priceData = new PriceData(tokens);
             const priceResponse = new PriceResponse(priceData, data.timeTaken);
 
+            console.clear();
             console.log("");
             console.log("Settings:");
             console.log(`Grid Width: ${gridSpread}%`);
@@ -264,7 +270,7 @@ async function refresh(selectedTokenA, selectedTokenB, selectedAddressA, selecte
             console.log(`Maximum Slippage: ${slipTarget}%`);
             console.log("");
 
-            //Create grid values and array once
+            //Create grid values
             if (gridCalc) {
                 spreadDown = priceResponse.data.selectedTokenA.price * (1 - (gridSpread / 100));
                 spreadUp = priceResponse.data.selectedTokenA.price * (1 + (gridSpread / 100));
@@ -275,18 +281,17 @@ async function refresh(selectedTokenA, selectedTokenB, selectedAddressA, selecte
                 sellOrders = 0;
 
                 //Get Start Balances
-                if (selectedTokenA === "SOL") {
-                    console.log(wallet.publicKey);
+                if (selectedTokenA === "SOL") {                    
                     tokenABalanceStartSol = await connection.getBalance(wallet.publicKey);
                     tokenABalanceStart = tokenABalanceStartSol / 1000000000;
-                    console.log(`${selectedTokenA} Start Balance: ${tokenABalanceStart.toFixed(4)}`);
+                    //console.log(`${selectedTokenA} Start Balance: ${tokenABalanceStart.toFixed(4)}`);
                 } else {
                     const tokenAAccounts = await connection.getParsedTokenAccountsByOwner(wallet.publicKey, { mint: tokenAMintAddress });
                     if (tokenAAccounts && tokenAAccounts.value.length > 0) {
                         const tokenAAccountInfo = tokenAAccounts.value[0].account;
                         const tokenAAccount = tokenAAccountInfo.data.parsed.info;
                         tokenABalanceStart = tokenAAccount.tokenAmount.uiAmount;
-                        console.log(`${selectedTokenA} Start Balance: ${tokenABalanceStart.toFixed(4)}`);
+                        //console.log(`${selectedTokenA} Start Balance: ${tokenABalanceStart.toFixed(4)}`);
                     } else {
                         console.log(chalk.red(`No token accounts found for ${selectedTokenA} in wallet ${wallet.publicKey}`));
                         process.exit(1);
@@ -296,66 +301,55 @@ async function refresh(selectedTokenA, selectedTokenB, selectedAddressA, selecte
                 if (selectedTokenB === "SOL") {
                     tokenBBalanceStart = await connection.getBalance(wallet.publicKey);
                     tokenBBalanceStart = tokenBBalanceStartSol / 1000000000;
-                    console.log(`${selectedTokenB} Start Balance: ${tokenBBalanceStart.toFixed(4)}`);
+                    //console.log(`${selectedTokenB} Start Balance: ${tokenBBalanceStart.toFixed(4)}`);
                 } else {
                     const tokenBAccounts = await connection.getParsedTokenAccountsByOwner(wallet.publicKey, { mint: tokenBMintAddress });
                     if (tokenBAccounts && tokenBAccounts.value.length > 0) {
                         const tokenBAccountInfo = tokenBAccounts.value[0].account;
                         const tokenBAccount = tokenBAccountInfo.data.parsed.info;
                         tokenBBalanceStart = tokenBAccount.tokenAmount.uiAmount;
-                        console.log(`${selectedTokenB} Start Balance: ${tokenBBalanceStart.toFixed(4)}`);
+                        //console.log(`${selectedTokenB} Start Balance: ${tokenBBalanceStart.toFixed(4)}`);
                     } else {
                         console.log(chalk.red(`No token accounts found for ${selectedTokenB} in wallet ${wallet.publicKey}`));
                         process.exit(1);
                     }
-                };               
+                };
                 gridCalc = false;
-            }
-            //console.log(tokenABalanceStart.toFixed(4));
-            //console.log(tokenBBalanceStart.toFixed(4));
-            
-            
+            }            
+            console.log(`${selectedTokenA} Start Balance: ${tokenABalanceStart.toFixed(4)}`);
+            console.log(`${selectedTokenB} Start Balance: ${tokenBBalanceStart.toFixed(4)}`);
             console.log("");
-
             //Get current wallet data - Token A
             if (selectedTokenA === "SOL") {
-                tokenABalanceStart = await connection.getBalance(wallet.publicKey) / 1000000000;
-                console.log(`Current TokenA Balance: ${tokenABalanceNow}`);
+                tokenABalanceNow = await connection.getBalance(wallet.publicKey) / 1000000000;
+                console.log(`Current ${selectedTokenA} Balance: ${tokenABalanceNow.toFixed(4)}`);
             } else {
                 const tokenAAccounts = await connection.getParsedTokenAccountsByOwner(wallet.publicKey, { mint: tokenAMintAddress });
                 const tokenAAccountInfo = tokenAAccounts && tokenAAccounts.value[0] && tokenAAccounts.value[0].account;
                 const tokenAAccount = tokenAAccountInfo.data.parsed.info;
                 tokenABalanceNow = tokenAAccount.tokenAmount.uiAmount;
-                console.log(`Current TokenA Balance: ${tokenABalanceNow}`);
+                console.log(`Current ${selectedTokenA} Balance: ${tokenABalanceNow.toFixed(4)}`);
             }
             //Get current wallet data - Token B
             if (selectedTokenB === "SOL") {
-                tokenBBalanceStart = await connection.getBalance(wallet.publicKey) / 1000000000;
-                console.log(`Current TokenB Balance: ${tokenBBalanceNow}`);
+                tokenBBalanceNow = await connection.getBalance(wallet.publicKey) / 1000000000;
+                console.log(`Current ${selectedTokenB} Balance: ${tokenBBalanceNow.toFixed(4)}`);
             } else {
                 const tokenBAccounts = await connection.getParsedTokenAccountsByOwner(wallet.publicKey, { mint: tokenBMintAddress });
                 const tokenBAccountInfo = tokenBAccounts && tokenBAccounts.value[0] && tokenBAccounts.value[0].account;
                 const tokenBAccount = tokenBAccountInfo.data.parsed.info;
                 tokenBBalanceNow = tokenBAccount.tokenAmount.uiAmount;
-                console.log(`Current TokenB Balance: ${tokenBBalanceNow}`);
+                console.log(`Current ${selectedTokenB} Balance: ${tokenBBalanceNow.toFixed(4)}`);
             }
-
             //Print Data
-            
-            
-            console.log("");
+                        
             //console.log(`Start Total USD Balance: ${accountBalUSDStart.toFixed(4)}`);
             //console.log(`Current Total USD Balance: ${accountBalUSDCurrent.toFixed(4)}`);
-            //var profit = accountBalUSDCurrent - accountBalUSDStart;
-            console.log("");
+            //var profit = accountBalUSDCurrent - accountBalUSDStart;            
             //console.log(`Current Profit USD: ${profit.toFixed(4)}`)
             console.log("");
             console.log(`Buy Orders: ${buyOrders}`);
             console.log(`Sell Orders: ${sellOrders}`);
-
-
-
-
             //Monitor price to last price difference.
             currentPrice = priceResponse.data.selectedTokenA.price.toFixed(4);
             if (currentPrice > lastPrice) { direction = "Trending Up" };
@@ -368,7 +362,7 @@ async function refresh(selectedTokenA, selectedTokenB, selectedAddressA, selecte
 
             if (currentPrice >= spreadUp) {
                 console.log("Crossed Above! - Create Sell Order");
-                await makeSellTransaction();
+                await makeSellTransaction(selectedAddressA, selectedAddressB, slipTarget, selectedDecimalsA);
                 console.log("Shifting Layers Up");
                 //create new layers to monitor
                 spreadUp = spreadUp + spreadIncrement;
@@ -377,7 +371,7 @@ async function refresh(selectedTokenA, selectedTokenB, selectedAddressA, selecte
 
             if (currentPrice <= spreadDown) {
                 console.log("Crossed Down! - Create Buy Order");
-                await makeBuyTransaction();
+                await makeBuyTransaction(selectedAddressA, selectedAddressB, slipTarget, selectedDecimalsB);
                 console.log("Shifting Layers Down");
                 //create new layers to monitor
                 spreadUp = spreadUp - spreadIncrement;
@@ -394,17 +388,20 @@ async function refresh(selectedTokenA, selectedTokenB, selectedAddressA, selecte
             selectedTokenB = null;
             main();
         }
+    } else {
+        console.log(`Request failed with status code ${response.status}`)
     }
-};
-    //else {
-    //    console.log(`Request failed with status code ${response.status}`)
-//};
+};    
 
-async function makeSellTransaction() {
-    var fixedSwapValLamports = fixedSwapVal * 1000000000;
+async function makeSellTransaction(selectedAddressA, selectedAddressB, slipTarget, selectedDecimalsA) {
+    console.log(selectedDecimalsA);
+    var tokenALamports = Math.floor(fixedSwapVal * (10 ** selectedDecimalsA));
+    console.log(tokenALamports);
+    //var fixedSwapValLamports = fixedSwapVal * 1000000000;
     var slipBPS = slipTarget * 100;
+    console.log(slipBPS);
     
-    const { data } = await (await fetch('https://quote-api.jup.ag/v4/quote?inputMint=' + selectedAddress + '&outputMint=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v&amount=' + fixedSwapValLamports + '&slippageBps=' + slipBPS)).json();
+    const { data } = await (await fetch('https://quote-api.jup.ag/v4/quote?inputMint=' + selectedAddressA + '&outputMint=' + selectedAddressB + '&amount=' + tokenALamports + '&slippageBps=' + slipBPS)).json();
     const routes = data;
 
     const transactions = await (
@@ -440,11 +437,14 @@ async function makeSellTransaction() {
     sellOrders++;
 }
 
-async function makeBuyTransaction() {
-    var usdcLamports = Math.floor((fixedSwapVal * currentPrice) * 1000000);
+async function makeBuyTransaction(selectedAddressA, selectedAddressB, slipTarget, selectedDecimalsB) {
+    console.log(selectedDecimalsB);
+    var tokenBLamports = Math.floor((fixedSwapVal * currentPrice) ** selectedDecimalsB);
+    console.log(tokenBLamports);
     var slipBPS = slipTarget * 100;
+    console.log(slipBPS);
     
-    const { data } = await (await fetch('https://quote-api.jup.ag/v4/quote?inputMint=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v&outputMint=' + selectedAddress + '&amount=' + usdcLamports + '&slippageBps=' + slipBPS)).json();
+    const { data } = await (await fetch('https://quote-api.jup.ag/v4/quote?inputMint=' + selectedAddressB + '&outputMint=' + selectedAddressA + '&amount=' + tokenBLamports + '&slippageBps=' + slipBPS)).json();
     const routes = data;
     // get serialized transactions for the swap
     const transactions = await (

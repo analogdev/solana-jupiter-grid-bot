@@ -1,6 +1,8 @@
 # Solana Jupiter Grid Bot
 
-SCRIPT CURRENTLY NON-FUNCTIONING. DO NOT USE.
+Run at your own risk! I am not liable for any losses using this script!
+
+Please ensure you have the correct token already available in your wallet. Auto-50/50 balancing will come later, as well as full auto setup.
 
 NodeJS and NPM required
 
