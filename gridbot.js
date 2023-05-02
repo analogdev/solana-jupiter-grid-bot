@@ -398,7 +398,7 @@ async function makeSellTransaction(selectedAddressA, selectedAddressB, slipTarge
     var tokenALamports = Math.floor(fixedSwapVal * (10 ** selectedDecimalsA));
     console.log(tokenALamports);
     //var fixedSwapValLamports = fixedSwapVal * 1000000000;
-    var slipBPS = slipTarget * 100;
+    var slipBPS = Math.floor(slipTarget * 100);
     console.log(slipBPS);
     
     const { data } = await (await fetch('https://quote-api.jup.ag/v4/quote?inputMint=' + selectedAddressA + '&outputMint=' + selectedAddressB + '&amount=' + tokenALamports + '&slippageBps=' + slipBPS)).json();
@@ -441,7 +441,7 @@ async function makeBuyTransaction(selectedAddressA, selectedAddressB, slipTarget
     console.log(selectedDecimalsB);
     var tokenBLamports = Math.floor((fixedSwapVal * currentPrice) ** selectedDecimalsB);
     console.log(tokenBLamports);
-    var slipBPS = slipTarget * 100;
+    var slipBPS = Math.floor(slipTarget * 100);
     console.log(slipBPS);
     
     const { data } = await (await fetch('https://quote-api.jup.ag/v4/quote?inputMint=' + selectedAddressB + '&outputMint=' + selectedAddressA + '&amount=' + tokenBLamports + '&slippageBps=' + slipBPS)).json();
