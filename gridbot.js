@@ -458,6 +458,8 @@ async function refresh(selectedTokenA, selectedTokenB, selectedAddressA, selecte
                 spreadUp = spreadUp - spreadIncrement;
                 spreadDown = spreadDown - spreadIncrement;
             }
+
+            /* ---- Do not uncomment this block. Used for forcing transactions, and causes a memory leak.
             const force = readline.createInterface({
                 input: process.stdin,
                 output: process.stdout
@@ -472,6 +474,8 @@ async function refresh(selectedTokenA, selectedTokenB, selectedAddressA, selecte
                     await makeBuyTransaction(selectedAddressA, selectedAddressB, slipTarget, selectedDecimalsB, devFeeA, devFee, fixedSwapVal, currentPrice);
                 }
             });
+            */
+
             console.log(chalk.red(`Spread Up: ${spreadUp.toFixed(selectedDecimalsA)}`, "-- Sell"));
             console.log(`Price: ${priceResponse.data.selectedTokenA.price.toFixed(selectedDecimalsA)}`);
             console.log(chalk.green(`Spread Down: ${spreadDown.toFixed(selectedDecimalsA)}`, "-- Buy"));
@@ -488,12 +492,12 @@ async function refresh(selectedTokenA, selectedTokenB, selectedAddressA, selecte
 };    
 
 async function makeSellTransaction(selectedAddressA, selectedAddressB, slipTarget, selectedDecimalsA, devFeeB, devFee, fixedSwapVal) {
-    console.log(selectedDecimalsA);
+    //console.log(selectedDecimalsA);
     var tokenALamports = Math.floor(fixedSwapVal * (10 ** selectedDecimalsA));
-    console.log(tokenALamports);
+    //console.log(tokenALamports);
     //var fixedSwapValLamports = fixedSwapVal * 1000000000;
     var slipBPS = Math.floor(slipTarget * 100);
-    console.log(slipBPS);
+    //console.log(slipBPS);
 
     let data = null;
     if (devFee != 0 && devFeeB != "None") {
@@ -544,15 +548,15 @@ async function makeSellTransaction(selectedAddressA, selectedAddressB, slipTarge
 }
 
 async function makeBuyTransaction(selectedAddressA, selectedAddressB, slipTarget, selectedDecimalsB, devFeeA, devFee, fixedSwapVal, currentPrice) {
-    console.log(selectedDecimalsB);
-    console.log(`FSV: ${fixedSwapVal}`);
-    console.log(`CP: ${currentPrice}`);
-    console.log(`Decimals: ${selectedDecimalsB}`);
+    //console.log(selectedDecimalsB);
+    //console.log(`FSV: ${fixedSwapVal}`);
+    //console.log(`CP: ${currentPrice}`);
+    //console.log(`Decimals: ${selectedDecimalsB}`);
 
     var tokenBLamports = Math.floor(fixedSwapVal * currentPrice * (10 ** selectedDecimalsB))
-    console.log(tokenBLamports);
+    //console.log(tokenBLamports);
     var slipBPS = Math.floor(slipTarget * 100);
-    console.log(slipBPS);
+    //console.log(slipBPS);
 
     let data = null;
     if (devFee != 0 && devFeeA != "None") {
