@@ -65,7 +65,7 @@ class PriceResponse {
 //vars for user inputs
 
 let gridSpread = 1;
-//let devFee = 0.1;
+let devFee = 0.1;
 let fixedSwapVal = 0;
 let slipTarget = 0.5;
 let refreshTime = 5;
@@ -90,6 +90,14 @@ async function main() {
     let selectedTokenB = '';
     let selectedAddressB = '';
     let selectedDecimalsB = '';
+    let devFeeA;
+    let devFeeB;
+    let solDevFee = "CebibGKKY8ZAnZrFo7q5U8Wr9BswAKg2qWbdog13vRMR";
+    let usdcDevFee = "9eXRZqjY3htAn1VJy3aaHGgMaBzgWpFvYDSZrufKxHa5";
+    let msolDevFee = "CEPjU8AeGPan4TuzyCv7LKBSbUSKV3sEVfin4t22W1qh";
+    let stsolDevFee = "7ahUp232krm79f9CV7iTWkCYvsdBAdVN8QzvWVco1eiy";
+    let arbDevFee = "FJeCc3E4yn9fyJN7rY6wwVcjo19XNV9fNuy1Vh6tcbzQ";
+    let usdtDevFee = "4CxNnXSxdVd6svVFLRTGZN1vwEuFcP7ALSCWYSkbR8ib";
     let validTokenA = false;
     let validTokenB = false;    
 
@@ -156,7 +164,7 @@ async function main() {
                 },
                 filter: Number
             },
-            /*
+            
             {
                 type: "input",
                 name: "devFee",
@@ -167,14 +175,14 @@ async function main() {
                     return valid || "Please Enter A Number"
                 },
                 filter: Number
-            }
-            */
+            }            
         ];
 
         let answer = await inquirer.prompt(question);
 
         gridSpread = answer.gridSpread;
-        //devFee = answer.devFee;
+        devFee = (answer.devFee * 100);
+        //* 100 is to get bps for queries
         
         const question2 =
             [
@@ -217,7 +225,38 @@ async function main() {
             fixedSwapVal = answer2.fixedSwapVal;
             slipTarget = answer2.slipTarget;
             refreshTime = answer2.refreshTime;
-            
+
+        if (selectedTokenA === "SOL") {
+            devFeeA = solDevFee;
+        } else if (selectedTokenA === "USDC") {
+            devFeeA = usdcDevFee;
+        } else if (selectedTokenA === "USDT") {
+            devFeeA = usdtDevFee;
+        } else if (selectedTokenA === "mSOL") {
+            devFeeA = msolDevFee;
+        } else if (selectedTokenA === "stSOL") {
+            devFeeA = stsolDevFee;
+        } else if (selectedTokenA === "ARB") {
+            devFeeA = arbDevFee;
+        } else {
+            devFeeA = "None";
+        }
+        if (selectedTokenB === "SOL") {
+            devFeeB = solDevFee;
+        } else if (selectedTokenB === "USDC") {
+            devFeeB = usdcDevFee;
+        } else if (selectedTokenB === "USDT") {
+            devFeeB = usdtDevFee;
+        } else if (selectedTokenB === "mSOL") {
+            devFeeB = msolDevFee;
+        } else if (selectedTokenB === "stSOL") {
+            devFeeB = stsolDevFee;
+        } else if (selectedTokenB === "ARB") {
+            devFeeB = arbDevFee;
+        } else {
+            devFeeB = "None";
+        }
+
             console.clear();
             
             console.log(`Selected Tokens: ${selectedTokenA} and ${selectedTokenB}`);
@@ -228,13 +267,14 @@ async function main() {
             console.log("");            
             break;            
         }        
-    refresh(selectedTokenA, selectedTokenB, selectedAddressA, selectedAddressB, wallet, tokenAMintAddress, tokenBMintAddress, selectedDecimalsA, selectedDecimalsB);
-    setInterval(() => { refresh(selectedTokenA, selectedTokenB, selectedAddressA, selectedAddressB, wallet, tokenAMintAddress, tokenBMintAddress, selectedDecimalsA, selectedDecimalsB); }, refreshTime * 1000);
+    refresh(selectedTokenA, selectedTokenB, selectedAddressA, selectedAddressB, wallet, tokenAMintAddress, tokenBMintAddress, selectedDecimalsA, selectedDecimalsB, devFee, devFeeA, devFeeB, currentPrice);
+    setInterval(() => { refresh(selectedTokenA, selectedTokenB, selectedAddressA, selectedAddressB, wallet, tokenAMintAddress, tokenBMintAddress, selectedDecimalsA, selectedDecimalsB, devFee, devFeeA, devFeeB, currentPrice); }, refreshTime * 1000);
 }
 
 //Init Spread Calculation once and declare spreads
 console.clear();
 var gridCalc = true;
+let usdCalcStartA, usdCalcStartB, usdCalcNowA, usdCalcNowB, usdCalcChange;
 let spreadUp, spreadDown, spreadIncrement;
 let tokenABalanceStart, tokenBBalanceStart, tokenABalanceNow, tokenBBalanceNow, accountBalUSDStart, accountBalUSDCurrent;
 let tokenABalanceStartSol, tokenBBalanceStartSol;
@@ -242,10 +282,9 @@ let buyOrders, sellOrders;
 var currentPrice;
 var lastPrice;
 var direction;
-const usdcAddress = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
 
-async function refresh(selectedTokenA, selectedTokenB, selectedAddressA, selectedAddressB, wallet, tokenAMintAddress, tokenBMintAddress, selectedDecimalsA, selectedDecimalsB) { 
+async function refresh(selectedTokenA, selectedTokenB, selectedAddressA, selectedAddressB, wallet, tokenAMintAddress, tokenBMintAddress, selectedDecimalsA, selectedDecimalsB, devFee, devFeeA, devFeeB, currentPrice) { 
     const response = await fetch(
         `https://price.jup.ag/v4/price?ids=${selectedTokenA}&vsToken=${selectedTokenB}`
     );
@@ -299,7 +338,7 @@ async function refresh(selectedTokenA, selectedTokenB, selectedAddressA, selecte
                 };
 
                 if (selectedTokenB === "SOL") {
-                    tokenBBalanceStart = await connection.getBalance(wallet.publicKey);
+                    tokenBBalanceStartSol = await connection.getBalance(wallet.publicKey);
                     tokenBBalanceStart = tokenBBalanceStartSol / 1000000000;
                     //console.log(`${selectedTokenB} Start Balance: ${tokenBBalanceStart.toFixed(4)}`);
                 } else {
@@ -313,76 +352,131 @@ async function refresh(selectedTokenA, selectedTokenB, selectedAddressA, selecte
                         console.log(chalk.red(`No token accounts found for ${selectedTokenB} in wallet ${wallet.publicKey}`));
                         process.exit(1);
                     }
+                    await fetch(`https://price.jup.ag/v4/price?ids=${selectedTokenA}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            usdCalcStartA = data.data[selectedTokenA].price;
+                        })
+                        .catch(error => {
+                            // handle errors
+                            console.error(error);
+                        });
+
+                    await fetch(`https://price.jup.ag/v4/price?ids=${selectedTokenB}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            usdCalcStartB = data.data[selectedTokenB].price;
+                        })
+                        .catch(error => {
+                            // handle errors
+                            console.error(error);
+                        });
+
+                    accountBalUSDStart = ((tokenABalanceStart.toFixed(selectedDecimalsA) * usdCalcStartA) + (tokenBBalanceStart.toFixed(selectedDecimalsB) * usdCalcStartB));
                 };
+
                 gridCalc = false;
-            }            
-            console.log(`${selectedTokenA} Start Balance: ${tokenABalanceStart.toFixed(4)}`);
-            console.log(`${selectedTokenB} Start Balance: ${tokenBBalanceStart.toFixed(4)}`);
+            }
+
+            console.log(`USD Value Start: ${accountBalUSDStart.toFixed(4)}`);
+            console.log(`${selectedTokenA} Start Balance: ${tokenABalanceStart.toFixed(selectedDecimalsA)}`);
+            console.log(`${selectedTokenB} Start Balance: ${tokenBBalanceStart.toFixed(selectedDecimalsB)}`);
             console.log("");
+
             //Get current wallet data - Token A
             if (selectedTokenA === "SOL") {
                 tokenABalanceNow = await connection.getBalance(wallet.publicKey) / 1000000000;
-                console.log(`Current ${selectedTokenA} Balance: ${tokenABalanceNow.toFixed(4)}`);
+                console.log(`Current ${selectedTokenA} Balance: ${tokenABalanceNow.toFixed(selectedDecimalsA)}`);
             } else {
                 const tokenAAccounts = await connection.getParsedTokenAccountsByOwner(wallet.publicKey, { mint: tokenAMintAddress });
                 const tokenAAccountInfo = tokenAAccounts && tokenAAccounts.value[0] && tokenAAccounts.value[0].account;
                 const tokenAAccount = tokenAAccountInfo.data.parsed.info;
                 tokenABalanceNow = tokenAAccount.tokenAmount.uiAmount;
-                console.log(`Current ${selectedTokenA} Balance: ${tokenABalanceNow.toFixed(4)}`);
+                console.log(`Current ${selectedTokenA} Balance: ${tokenABalanceNow.toFixed(selectedDecimalsA)}`);
             }
             //Get current wallet data - Token B
             if (selectedTokenB === "SOL") {
                 tokenBBalanceNow = await connection.getBalance(wallet.publicKey) / 1000000000;
-                console.log(`Current ${selectedTokenB} Balance: ${tokenBBalanceNow.toFixed(4)}`);
+                console.log(`Current ${selectedTokenB} Balance: ${tokenBBalanceNow.toFixed(selectedDecimalsB)}`);
             } else {
                 const tokenBAccounts = await connection.getParsedTokenAccountsByOwner(wallet.publicKey, { mint: tokenBMintAddress });
                 const tokenBAccountInfo = tokenBAccounts && tokenBAccounts.value[0] && tokenBAccounts.value[0].account;
                 const tokenBAccount = tokenBAccountInfo.data.parsed.info;
                 tokenBBalanceNow = tokenBAccount.tokenAmount.uiAmount;
-                console.log(`Current ${selectedTokenB} Balance: ${tokenBBalanceNow.toFixed(4)}`);
+                console.log(`Current ${selectedTokenB} Balance: ${tokenBBalanceNow.toFixed(selectedDecimalsB)}`);
             }
-            //Print Data
-                        
-            //console.log(`Start Total USD Balance: ${accountBalUSDStart.toFixed(4)}`);
-            //console.log(`Current Total USD Balance: ${accountBalUSDCurrent.toFixed(4)}`);
-            //var profit = accountBalUSDCurrent - accountBalUSDStart;            
-            //console.log(`Current Profit USD: ${profit.toFixed(4)}`)
+            //get USD price for each asset
+            //TO DO
+            await fetch(`https://price.jup.ag/v4/price?ids=${selectedTokenA}`)
+                .then(response => response.json())
+                .then(data => {
+                    usdCalcNowA = data.data[selectedTokenA].price;
+                })
+                .catch(error => {
+                    // handle errors
+                    console.error(error);
+                });
+            await fetch(`https://price.jup.ag/v4/price?ids=${selectedTokenB}`)
+                .then(response => response.json())
+                .then(data => {
+                    usdCalcNowB = data.data[selectedTokenB].price;
+                })
+                .catch(error => {
+                    // handle errors
+                    console.error(error);
+                });
+
+            accountBalUSDCurrent = ((tokenABalanceNow.toFixed(selectedDecimalsA) * usdCalcNowA) + (tokenBBalanceNow.toFixed(selectedDecimalsB) * usdCalcNowB));
+            console.log(`Current USD Value: ${accountBalUSDCurrent.toFixed(4)}`);
+            usdCalcChange = accountBalUSDCurrent - accountBalUSDStart;
+            console.log(`Current Profit: ${usdCalcChange.toFixed(4)}`);
+            //Print Data                    
             console.log("");
             console.log(`Buy Orders: ${buyOrders}`);
             console.log(`Sell Orders: ${sellOrders}`);
             //Monitor price to last price difference.
-            currentPrice = priceResponse.data.selectedTokenA.price.toFixed(4);
+            currentPrice = priceResponse.data.selectedTokenA.price.toFixed(selectedDecimalsA);
             if (currentPrice > lastPrice) { direction = "Trending Up" };
             if (currentPrice === lastPrice) { direction = "Trending Sideways" };
             if (currentPrice < lastPrice) { direction = "Trending Down" };
             console.log(direction);
-
             //Monitor current price and trend, compared to spread
             console.log("");
-
             if (currentPrice >= spreadUp) {
                 console.log("Crossed Above! - Create Sell Order");
-                await makeSellTransaction(selectedAddressA, selectedAddressB, slipTarget, selectedDecimalsA);
+                await makeSellTransaction(selectedAddressA, selectedAddressB, slipTarget, selectedDecimalsA, devFeeB, devFee, fixedSwapVal);
                 console.log("Shifting Layers Up");
                 //create new layers to monitor
                 spreadUp = spreadUp + spreadIncrement;
                 spreadDown = spreadDown + spreadIncrement;
             }
-
             if (currentPrice <= spreadDown) {
                 console.log("Crossed Down! - Create Buy Order");
-                await makeBuyTransaction(selectedAddressA, selectedAddressB, slipTarget, selectedDecimalsB);
+                await makeBuyTransaction(selectedAddressA, selectedAddressB, slipTarget, selectedDecimalsB, devFeeA, devFee, fixedSwapVal, currentPrice);
                 console.log("Shifting Layers Down");
                 //create new layers to monitor
                 spreadUp = spreadUp - spreadIncrement;
                 spreadDown = spreadDown - spreadIncrement;
             }
-
-            console.log(chalk.red(`Spread Up: ${spreadUp.toFixed(4)}`, "-- Sell"));
-            console.log(`Price: ${priceResponse.data.selectedTokenA.price.toFixed(4)}`);
-            console.log(chalk.green(`Spread Down: ${spreadDown.toFixed(4)}`, "-- Buy"));
+            const force = readline.createInterface({
+                input: process.stdin,
+                output: process.stdout
+            });
+            force.on('line', async function (input) {
+                if (input === 's') {
+                    console.log('Sell order triggered manually');
+                    await makeSellTransaction(selectedAddressA, selectedAddressB, slipTarget, selectedDecimalsA, devFeeB, devFee, fixedSwapVal);
+                }
+                if (input === 'b') {
+                    console.log('Buy order triggered manually');
+                    await makeBuyTransaction(selectedAddressA, selectedAddressB, slipTarget, selectedDecimalsB, devFeeA, devFee, fixedSwapVal, currentPrice);
+                }
+            });
+            console.log(chalk.red(`Spread Up: ${spreadUp.toFixed(selectedDecimalsA)}`, "-- Sell"));
+            console.log(`Price: ${priceResponse.data.selectedTokenA.price.toFixed(selectedDecimalsA)}`);
+            console.log(chalk.green(`Spread Down: ${spreadDown.toFixed(selectedDecimalsA)}`, "-- Buy"));
             console.log("");
-            lastPrice = priceResponse.data.selectedTokenA.price.toFixed(4);
+            lastPrice = priceResponse.data.selectedTokenA.price.toFixed(selectedDecimalsA);
         } else {
             console.log(`Token ${selectedTokenA} not found`);
             selectedTokenB = null;
@@ -393,15 +487,27 @@ async function refresh(selectedTokenA, selectedTokenB, selectedAddressA, selecte
     }
 };    
 
-async function makeSellTransaction(selectedAddressA, selectedAddressB, slipTarget, selectedDecimalsA) {
+async function makeSellTransaction(selectedAddressA, selectedAddressB, slipTarget, selectedDecimalsA, devFeeB, devFee, fixedSwapVal) {
     console.log(selectedDecimalsA);
     var tokenALamports = Math.floor(fixedSwapVal * (10 ** selectedDecimalsA));
     console.log(tokenALamports);
     //var fixedSwapValLamports = fixedSwapVal * 1000000000;
     var slipBPS = Math.floor(slipTarget * 100);
     console.log(slipBPS);
-    
-    const { data } = await (await fetch('https://quote-api.jup.ag/v4/quote?inputMint=' + selectedAddressA + '&outputMint=' + selectedAddressB + '&amount=' + tokenALamports + '&slippageBps=' + slipBPS)).json();
+
+    let data = null;
+    if (devFee != 0 && devFeeB != "None") {
+        const response = await fetch('https://quote-api.jup.ag/v4/quote?inputMint=' + selectedAddressA + '&outputMint=' + selectedAddressB + '&amount=' + tokenALamports + '&slippageBps=' + slipBPS + '&feeBps=' + devFee + '&feeAccount=' + devFeeB);
+        //console.log(response);
+        const jsonData = await response.json();
+        data = jsonData.data;
+    } else {
+        const response = await fetch('https://quote-api.jup.ag/v4/quote?inputMint=' + selectedAddressA + '&outputMint=' + selectedAddressB + '&amount=' + tokenALamports + '&slippageBps=' + slipBPS);
+        //console.log(response);
+        const jsonData = await response.json();
+        data = jsonData.data;
+    }
+    //console.log(data);
     const routes = data;
 
     const transactions = await (
@@ -437,14 +543,32 @@ async function makeSellTransaction(selectedAddressA, selectedAddressB, slipTarge
     sellOrders++;
 }
 
-async function makeBuyTransaction(selectedAddressA, selectedAddressB, slipTarget, selectedDecimalsB) {
+async function makeBuyTransaction(selectedAddressA, selectedAddressB, slipTarget, selectedDecimalsB, devFeeA, devFee, fixedSwapVal, currentPrice) {
     console.log(selectedDecimalsB);
-    var tokenBLamports = Math.floor((fixedSwapVal * currentPrice) ** selectedDecimalsB);
+    console.log(`FSV: ${fixedSwapVal}`);
+    console.log(`CP: ${currentPrice}`);
+    console.log(`Decimals: ${selectedDecimalsB}`);
+
+    var tokenBLamports = Math.floor(fixedSwapVal * currentPrice * (10 ** selectedDecimalsB))
     console.log(tokenBLamports);
     var slipBPS = Math.floor(slipTarget * 100);
     console.log(slipBPS);
-    
-    const { data } = await (await fetch('https://quote-api.jup.ag/v4/quote?inputMint=' + selectedAddressB + '&outputMint=' + selectedAddressA + '&amount=' + tokenBLamports + '&slippageBps=' + slipBPS)).json();
+
+    let data = null;
+    if (devFee != 0 && devFeeA != "None") {
+        const response = await fetch('https://quote-api.jup.ag/v4/quote?inputMint=' + selectedAddressB + '&outputMint=' + selectedAddressA + '&amount=' + tokenBLamports + '&slippageBps=' + slipBPS + '&feeBps=' + devFee + '&feeAccount=' + devFeeA);
+        //console.log(response);
+        const jsonData = await response.json();
+        data = jsonData.data;
+    } else {
+        const response = await fetch('https://quote-api.jup.ag/v4/quote?inputMint=' + selectedAddressB + '&outputMint=' + selectedAddressA + '&amount=' + tokenBLamports + '&slippageBps=' + slipBPS);
+        //console.log(response);
+        const jsonData = await response.json();
+        data = jsonData.data;
+    }
+    //console.log(data);
+  
+    //const { data } = await (await fetch('https://quote-api.jup.ag/v4/quote?inputMint=' + selectedAddressB + '&outputMint=' + selectedAddressA + '&amount=' + tokenBLamports + '&slippageBps=' + slipBPS)).json();
     const routes = data;
     // get serialized transactions for the swap
     const transactions = await (
