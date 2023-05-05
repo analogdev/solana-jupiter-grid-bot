@@ -65,9 +65,9 @@ class PriceResponse {
 //vars for user inputs
 
 let gridSpread = 1;
-let devFee = 0.1;
+let devFee = 0.02;
 let fixedSwapVal = 0;
-let slipTarget = 0.5;
+let slipTarget = 0.25;
 let refreshTime = 5;
 //const usdcMintAddress = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
 
@@ -169,7 +169,7 @@ async function main() {
                 type: "input",
                 name: "devFee",
                 message: "What Percentage Donation Fee would you like to set? - Default is 0.1%",
-                default: '0.1',
+                default: '0.02',
                 validate: function (value) {
                     var valid = !isNaN(parseFloat(value));
                     return valid || "Please Enter A Number"
@@ -200,7 +200,7 @@ async function main() {
                 type: "input",
                 name: "slipTarget",
                 message: "Acceptable Slippage %? - Default 0.5%",
-                default: '0.5',
+                default: '0.25',
                 validate: function (value) {
                     var valid = !isNaN(parseFloat(value));
                     return valid || "Please Enter A Number";
@@ -492,120 +492,120 @@ async function refresh(selectedTokenA, selectedTokenB, selectedAddressA, selecte
 };    
 
 async function makeSellTransaction(selectedAddressA, selectedAddressB, slipTarget, selectedDecimalsA, devFeeB, devFee, fixedSwapVal) {
-    //console.log(selectedDecimalsA);
-    var tokenALamports = Math.floor(fixedSwapVal * (10 ** selectedDecimalsA));
-    //console.log(tokenALamports);
-    //var fixedSwapValLamports = fixedSwapVal * 1000000000;
-    var slipBPS = Math.floor(slipTarget * 100);
-    //console.log(slipBPS);
+    try {
+        //console.log(selectedDecimalsA);
+        var tokenALamports = Math.floor(fixedSwapVal * (10 ** selectedDecimalsA));
+        //console.log(tokenALamports);
+        //var fixedSwapValLamports = fixedSwapVal * 1000000000;
+        var slipBPS = Math.floor(slipTarget * 100);
+        //console.log(slipBPS);
 
-    let data = null;
-    if (devFee != 0 && devFeeB != "None") {
-        const response = await fetch('https://quote-api.jup.ag/v4/quote?inputMint=' + selectedAddressA + '&outputMint=' + selectedAddressB + '&amount=' + tokenALamports + '&slippageBps=' + slipBPS + '&feeBps=' + devFee + '&feeAccount=' + devFeeB);
-        //console.log(response);
-        const jsonData = await response.json();
-        data = jsonData.data;
-    } else {
-        const response = await fetch('https://quote-api.jup.ag/v4/quote?inputMint=' + selectedAddressA + '&outputMint=' + selectedAddressB + '&amount=' + tokenALamports + '&slippageBps=' + slipBPS);
-        //console.log(response);
-        const jsonData = await response.json();
-        data = jsonData.data;
-    }
-    //console.log(data);
-    const routes = data;
+        let data = null;
+        if (devFee != 0 && devFeeB != "None") {
+            const response = await fetch('https://quote-api.jup.ag/v4/quote?inputMint=' + selectedAddressA + '&outputMint=' + selectedAddressB + '&amount=' + tokenALamports + '&slippageBps=' + slipBPS + '&feeBps=');
+            //console.log(response);
+            const jsonData = await response.json();
+            data = jsonData.data;
+        } else {
+            const response = await fetch('https://quote-api.jup.ag/v4/quote?inputMint=' + selectedAddressA + '&outputMint=' + selectedAddressB + '&amount=' + tokenALamports + '&slippageBps=' + slipBPS);
+            //console.log(response);
+            const jsonData = await response.json();
+            data = jsonData.data;
+        }
+        //console.log(data);
+        const routes = data;
 
-    const transactions = await (
-        await fetch('https://quote-api.jup.ag/v4/swap', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                // route from /quote api
-                route: routes[0],
-                // user public key to be used for the swap
-                userPublicKey: wallet.publicKey.toString(),                
-                wrapUnwrapSOL: true,                
+        const transactions = await (
+            await fetch('https://quote-api.jup.ag/v4/swap', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    // route from /quote api
+                    route: routes[0],
+                    // user public key to be used for the swap
+                    userPublicKey: wallet.publicKey.toString(),
+                    wrapUnwrapSOL: true,
+                    feeAccount: devFeeB
+                })
             })
-        })
-    ).json();    
-    const { swapTransaction } = transactions;    
-    // deserialize the transaction
-    const swapTransactionBuf = Buffer.from(swapTransaction, 'base64');
-    var transaction = VersionedTransaction.deserialize(swapTransactionBuf);
-    console.log("Making Sell Order!")
-    // sign the transaction
-    transaction.sign([wallet.payer]);
-    // Execute the transaction
-    const rawTransaction = transaction.serialize()
-    const txid = await connection.sendRawTransaction(rawTransaction, {
-        skipPreflight: false,
-        maxRetries: 5
-    });
-    await connection.confirmTransaction(txid);
-    console.log(`https://solscan.io/tx/${txid}`);
-    sellOrders++;
-}
+        ).json();
+        const { swapTransaction } = transactions;
+        // deserialize the transaction
+        const swapTransactionBuf = Buffer.from(swapTransaction, 'base64');
+        var transaction = VersionedTransaction.deserialize(swapTransactionBuf);
+        console.log("Making Sell Order!")
+        // sign the transaction
+        transaction.sign([wallet.payer]);
+        // Execute the transaction
+        const rawTransaction = transaction.serialize()
+        const txid = await connection.sendRawTransaction(rawTransaction, {
+            skipPreflight: false,
+            maxRetries: 5
+        });
+        await connection.confirmTransaction(txid);
+        console.log(`https://solscan.io/tx/${txid}`);
+        sellOrders++;
+    }
+    catch (error) {
+        console.error(`Transaction error: ${error.message}`)
+    }
+};
 
 async function makeBuyTransaction(selectedAddressA, selectedAddressB, slipTarget, selectedDecimalsB, devFeeA, devFee, fixedSwapVal, currentPrice) {
-    //console.log(selectedDecimalsB);
-    //console.log(`FSV: ${fixedSwapVal}`);
-    //console.log(`CP: ${currentPrice}`);
-    //console.log(`Decimals: ${selectedDecimalsB}`);
-
-    var tokenBLamports = Math.floor(fixedSwapVal * currentPrice * (10 ** selectedDecimalsB))
-    //console.log(tokenBLamports);
-    var slipBPS = Math.floor(slipTarget * 100);
-    //console.log(slipBPS);
-
-    let data = null;
-    if (devFee != 0 && devFeeA != "None") {
-        const response = await fetch('https://quote-api.jup.ag/v4/quote?inputMint=' + selectedAddressB + '&outputMint=' + selectedAddressA + '&amount=' + tokenBLamports + '&slippageBps=' + slipBPS + '&feeBps=' + devFee + '&feeAccount=' + devFeeA);
-        //console.log(response);
-        const jsonData = await response.json();
-        data = jsonData.data;
-    } else {
-        const response = await fetch('https://quote-api.jup.ag/v4/quote?inputMint=' + selectedAddressB + '&outputMint=' + selectedAddressA + '&amount=' + tokenBLamports + '&slippageBps=' + slipBPS);
-        //console.log(response);
-        const jsonData = await response.json();
-        data = jsonData.data;
-    }
-    //console.log(data);
-  
-    //const { data } = await (await fetch('https://quote-api.jup.ag/v4/quote?inputMint=' + selectedAddressB + '&outputMint=' + selectedAddressA + '&amount=' + tokenBLamports + '&slippageBps=' + slipBPS)).json();
-    const routes = data;
-    // get serialized transactions for the swap
-    const transactions = await (
-        await fetch('https://quote-api.jup.ag/v4/swap', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                // route from /quote api
-                route: routes[0],
-                // user public key to be used for the swap
-                userPublicKey: wallet.publicKey.toString(),
-                wrapUnwrapSOL: true,                
+    try {
+        var tokenBLamports = Math.floor(fixedSwapVal * currentPrice * (10 ** selectedDecimalsB))        
+        var slipBPS = Math.floor(slipTarget * 100);
+        let data = null;
+        if (devFee != 0 && devFeeA != "None") {
+            const response = await fetch('https://quote-api.jup.ag/v4/quote?inputMint=' + selectedAddressB + '&outputMint=' + selectedAddressA + '&amount=' + tokenBLamports + '&slippageBps=' + slipBPS + '&feeBps=' + devFee);
+            
+            const jsonData = await response.json();
+            data = jsonData.data;
+        } else {
+            const response = await fetch('https://quote-api.jup.ag/v4/quote?inputMint=' + selectedAddressB + '&outputMint=' + selectedAddressA + '&amount=' + tokenBLamports + '&slippageBps=' + slipBPS);
+            
+            const jsonData = await response.json();
+            data = jsonData.data;
+        }        
+        const routes = data;
+        // get serialized transactions for the swap
+        const transactions = await (
+            await fetch('https://quote-api.jup.ag/v4/swap', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    // route from /quote api
+                    route: routes[0],
+                    // user public key to be used for the swap
+                    userPublicKey: wallet.publicKey.toString(),
+                    wrapUnwrapSOL: true,
+                    feeAccount: devFeeA
+                })
             })
-        })
-    ).json();
+        ).json();
 
-    const { swapTransaction } = transactions;
-    // deserialize the transaction
-    const swapTransactionBuf = Buffer.from(swapTransaction, 'base64');
-    var transaction = VersionedTransaction.deserialize(swapTransactionBuf);
-    console.log("Making Buy Order!");
-    // sign the transaction
-    transaction.sign([wallet.payer]);
-    // Execute the transaction
-    const rawTransaction = transaction.serialize()
-    const txid = await connection.sendRawTransaction(rawTransaction, {
-        skipPreflight: false,
-        maxRetries: 5
-    });
-    await connection.confirmTransaction(txid);
-    console.log(`https://solscan.io/tx/${txid}`);
-    buyOrders++;
-}
+        const { swapTransaction } = transactions;
+        // deserialize the transaction
+        const swapTransactionBuf = Buffer.from(swapTransaction, 'base64');
+        var transaction = VersionedTransaction.deserialize(swapTransactionBuf);
+        console.log("Making Buy Order!");
+        // sign the transaction
+        transaction.sign([wallet.payer]);
+        // Execute the transaction
+        const rawTransaction = transaction.serialize()
+        const txid = await connection.sendRawTransaction(rawTransaction, {
+            skipPreflight: false,
+            maxRetries: 5
+        });
+        await connection.confirmTransaction(txid);
+        console.log(`https://solscan.io/tx/${txid}`);
+        buyOrders++;
+    } catch (error) {
+        console.error(`Transaction error: ${error.message}`)
+    }
+};
 main();
