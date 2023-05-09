@@ -8,7 +8,7 @@ import bs58 from 'bs58';
 import dotenv from 'dotenv';
 import { Wallet } from '@project-serum/anchor';
 import axios from 'axios';
-import { promisify }  from 'util';
+import { promisify } from 'util';
 
 async function getTokens() {
     try {
@@ -32,7 +32,7 @@ const wallet = new Wallet(keyPair);
 // Replace with the Solana network endpoint URL
 const connection = new Connection(process.env.RPC_ENDPOINT, 'confirmed', {
     commitment: 'confirmed',
-    timeout: 60000
+    timeout: 90000
 });
 
 //api request data for URL query on swaps
@@ -64,11 +64,12 @@ class PriceResponse {
 
 //vars for user inputs
 
-let gridSpread = 1;
-let devFee = 0.02;
+let gridSpread = 0.33;
+let devFee = 0.01;
 let fixedSwapVal = 0;
-let slipTarget = 0.25;
+let slipTarget = 0.15;
 let refreshTime = 5;
+let startTime = process.hrtime();
 //const usdcMintAddress = new PublicKey("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
 
 async function main() {
@@ -99,7 +100,9 @@ async function main() {
     let arbDevFee = "FJeCc3E4yn9fyJN7rY6wwVcjo19XNV9fNuy1Vh6tcbzQ";
     let usdtDevFee = "4CxNnXSxdVd6svVFLRTGZN1vwEuFcP7ALSCWYSkbR8ib";
     let validTokenA = false;
-    let validTokenB = false;    
+    let validTokenB = false;
+    let start = new Date();
+    
 
     while (!validTokenA) {
         const answer = await questionAsync(`Please Enter The First Token Symbol (Case Sensitive):`);
@@ -157,7 +160,7 @@ async function main() {
                 type: "input",
                 name: "gridSpread",
                 message: "What Grid Spread in Percent?",
-                default: "1",
+                default: "0.33",
                 validate: function (value) {
                     var valid = !isNaN(parseFloat(value));
                     return valid || "Please Enter A Number";
@@ -168,8 +171,8 @@ async function main() {
             {
                 type: "input",
                 name: "devFee",
-                message: "What Percentage Donation Fee would you like to set? - Default is 0.1%",
-                default: '0.02',
+                message: "What Percentage Donation Fee would you like to set? - Default is 0.01%",
+                default: '0.01',
                 validate: function (value) {
                     var valid = !isNaN(parseFloat(value));
                     return valid || "Please Enter A Number"
@@ -199,8 +202,8 @@ async function main() {
             {
                 type: "input",
                 name: "slipTarget",
-                message: "Acceptable Slippage %? - Default 0.5%",
-                default: '0.25',
+                message: "Acceptable Slippage %? - Default 0.15%",
+                default: '0.15',
                 validate: function (value) {
                     var valid = !isNaN(parseFloat(value));
                     return valid || "Please Enter A Number";
@@ -210,8 +213,8 @@ async function main() {
             {
                 type: "input",
                 name: "refreshTime",                
-                message: "What Refresh Time would you like? (Seconds) - Default 10 Seconds",
-                default: '10',
+                message: "What Refresh Time would you like? (Seconds) - Default 5 Seconds",
+                default: '5',
                 validate: function (value) {
                    var valid = !isNaN(parseFloat(value));
                    return valid || "Please Enter A Number";
@@ -266,9 +269,9 @@ async function main() {
             console.log(`Slippage Target: ${slipTarget}%`)
             console.log("");            
             break;            
-        }        
-    refresh(selectedTokenA, selectedTokenB, selectedAddressA, selectedAddressB, wallet, tokenAMintAddress, tokenBMintAddress, selectedDecimalsA, selectedDecimalsB, devFee, devFeeA, devFeeB, currentPrice);
-    setInterval(() => { refresh(selectedTokenA, selectedTokenB, selectedAddressA, selectedAddressB, wallet, tokenAMintAddress, tokenBMintAddress, selectedDecimalsA, selectedDecimalsB, devFee, devFeeA, devFeeB, currentPrice); }, refreshTime * 1000);
+    }    
+    refresh(selectedTokenA, selectedTokenB, start, selectedAddressA, selectedAddressB, wallet, tokenAMintAddress, tokenBMintAddress, selectedDecimalsA, selectedDecimalsB, devFee, devFeeA, devFeeB, currentPrice);
+    setInterval(() => { refresh(selectedTokenA, selectedTokenB, start, selectedAddressA, selectedAddressB, wallet, tokenAMintAddress, tokenBMintAddress, selectedDecimalsA, selectedDecimalsB, devFee, devFeeA, devFeeB, currentPrice); }, refreshTime * 1000);
 }
 
 //Init Spread Calculation once and declare spreads
@@ -282,9 +285,11 @@ let buyOrders, sellOrders;
 var currentPrice;
 var lastPrice;
 var direction;
+let userPercentageChange;
+let percentageChange;
+let tokenAStart;
 
-
-async function refresh(selectedTokenA, selectedTokenB, selectedAddressA, selectedAddressB, wallet, tokenAMintAddress, tokenBMintAddress, selectedDecimalsA, selectedDecimalsB, devFee, devFeeA, devFeeB, currentPrice) { 
+async function refresh(selectedTokenA, selectedTokenB, start, selectedAddressA, selectedAddressB, wallet, tokenAMintAddress, tokenBMintAddress, selectedDecimalsA, selectedDecimalsB, devFee, devFeeA, devFeeB, currentPrice) { 
     const response = await fetch(
         `https://price.jup.ag/v4/price?ids=${selectedTokenA}&vsToken=${selectedTokenB}`
     );
@@ -299,8 +304,20 @@ async function refresh(selectedTokenA, selectedTokenB, selectedAddressA, selecte
 
             const priceData = new PriceData(tokens);
             const priceResponse = new PriceResponse(priceData, data.timeTaken);
-
+            const endTime = new Date();
+            const elapsedMilliseconds = endTime.getTime() - start.getTime();
+            const elapsedSeconds = Math.floor(elapsedMilliseconds / 1000);
+            const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+            const elapsedHours = Math.floor(elapsedMinutes / 60);
+            const elapsedDays = Math.floor(elapsedHours / 24);
+            const seconds = elapsedSeconds % 60;
+            const minutes = elapsedMinutes % 60;
+            const hours = elapsedHours % 24;
+            const timeString = `${elapsedDays} days, ${hours} hours, ${minutes} minutes, ${seconds} seconds`;
+            
             console.clear();
+            console.log(`Gridbot Started at ${start.toLocaleString()}`);
+            console.log(`Gridbot has been running for ${timeString}`);
             console.log("");
             console.log("Settings:");
             console.log(`Grid Width: ${gridSpread}%`);
@@ -426,10 +443,14 @@ async function refresh(selectedTokenA, selectedTokenB, selectedAddressA, selecte
                     console.error(error);
                 });
 
+            userPercentageChange = ((accountBalUSDCurrent - accountBalUSDStart) / accountBalUSDStart) * 100;
+            percentageChange = ((usdCalcNowA - usdCalcStartA) / usdCalcStartA) * 100; 
             accountBalUSDCurrent = ((tokenABalanceNow.toFixed(selectedDecimalsA) * usdCalcNowA) + (tokenBBalanceNow.toFixed(selectedDecimalsB) * usdCalcNowB));
             console.log(`Current USD Value: ${accountBalUSDCurrent.toFixed(4)}`);
             usdCalcChange = accountBalUSDCurrent - accountBalUSDStart;
-            console.log(`Current Profit: ${usdCalcChange.toFixed(4)}`);
+            console.log(`Current USD Profit: ${usdCalcChange.toFixed(4)}`);
+            console.log(`Current Profit Percentage: ${userPercentageChange.toFixed(2)}`);
+            console.log(`${selectedTokenA} percentage change since start: ${percentageChange.toFixed(2)}`);
             //Print Data                    
             console.log("");
             console.log(`Buy Orders: ${buyOrders}`);
